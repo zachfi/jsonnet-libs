@@ -11,7 +11,7 @@
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
-  local tls = import 'tls/util.libsonnet',
+  local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
 
   new(appName, namespace): {
     local this = self,
