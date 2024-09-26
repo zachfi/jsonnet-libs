@@ -158,7 +158,7 @@
       + app.withNodeSelector(nodeKey, nodeValue),
 
     client+:
-      app.withNodeSelector(nodeKey, nodeValue, 'NotIn'),
+      app.withNodeSelector(nodeKey, nodeValue),
   },
 
   withExternalAddresses(addresses): {
