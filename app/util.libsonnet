@@ -443,6 +443,13 @@
       statefulset.spec.template.spec.withVolumesMixin([
         volume.fromHostPath(volumeName, mountPath),
       ]),
+
+    cronJob+:
+      cronJob.spec.jobTemplate.spec.template.spec.withVolumesMixin([
+        volume.fromHostPath(volumeName, mountPath),
+      ]),
+
+
   },
 
   withDeployment(): {
