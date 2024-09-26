@@ -19,9 +19,8 @@
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
-  // TODO: reintegrate restic
-  // local restic = import 'restic/restic.libsonnet',
-  local tls = import 'tls/util.libsonnet',
+  local restic = import 'github.com/zachfi/jsonnet-libs/restic/restic.libsonnet',
+  local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
 
   new(appName, image, namespace): {
     local app = self,
@@ -76,7 +75,6 @@
         appName,
         1,
         app.container,
-        // self.zigbee2mqtt_pvc,
       )
       + statefulset.mixin.spec.template.metadata.withAnnotations({
         container_hash: std.md5(std.toString(app.container)),
@@ -90,65 +88,40 @@
       ),
 
     cronJob::
-      cronJob.new(appName, '*/3 * * * *', app.container)
+      local this = self;
+      cronJob.new(appName, '*/3 * * * *', [this.container])
       + cronJob.spec.jobTemplate.spec.withTtlSecondsAfterFinished(300)  // 1 week
       + cronJob.spec.jobTemplate.spec.withBackoffLimit(1)
       + cronJob.spec.jobTemplate.spec.template.spec.withRestartPolicy('Never'),
 
     backup::
-      // TODO: reintegrate restic
-      // restic.new(self.appName, self.app.namespace)
-      {},
+      local this = self;
+      restic.new(this.appName, this.app.namespace),
 
-    // use withResticBackup()
+    // Use withResticBackup() to enable restic backups for the workload.
     resticBackup: {},
 
-    // Workload is used to define the overall replicaset.  This allows functions to modify the behavior of both the statefulset and deployment keys, without knowing which one will be used in the end.
+    // Workload is used to define the overall replicaset.  This allows
+    // functions to modify the behavior of both the statefulset and deployment
+    // keys, without knowing which one will be used in the end.  Use
+    // withDeployment(), withStatefulSet(), or withDaemonSet() to get the final
+    // workload.
     workload: {},
-    // + deployment.mixin.spec.template.metadata.withAnnotations({
-    //   container_hash: std.md5(std.toString(container)),
-    // }),
-    // + deployment.mixin.spec.template.spec.withVolumes([
-    // volume.fromPersistentVolumeClaim(dataVolume, $.dataPvc.metadata.name),
-    // volume.withName(dataVolume)
-    // + volume.nfs.withPath(nfsDataMount)
-    // + volume.nfs.withServer(nfsServer),
-    //   volume.withName(mediaVolume)
-    //   + volume.nfs.withPath(nfsMediaMount)
-    //   + volume.nfs.withServer(nfsServer),
-    // ])
-    // + deployment.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms([
-    // nodeSelectorTerm.withMatchExpressions([
-    //   nodeSelectorRequirement.withKey('media/%s' % appName)
-    //   + nodeSelectorRequirement.withOperator('In')
-    //   + nodeSelectorRequirement.withValues([
-    //     'true',
-    //   ]),
-    // ]),
-    // ])
   },
 
-  withNodeSelector(key, value, operator='In'):
-    {
+  withNodeSelector(key, value): {
+    deployment+:
+      deployment.spec.template.spec.withNodeSelector({ [key]: value }),
 
-      local selectorTerms = [
-        nodeSelectorTerm.withMatchExpressions([
-          nodeSelectorRequirement.withKey(key)
-          + nodeSelectorRequirement.withOperator(operator)
-          + nodeSelectorRequirement.withValues([value]),
-        ]),
-      ],
+    statefulset+:
+      statefulset.spec.template.spec.withNodeSelector({ [key]: value }),
 
-      deployment+:
-        deployment.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms(selectorTerms,),
+    daemonset+:
+      daemonset.spec.template.spec.withNodeSelector({ [key]: value }),
 
-      daemonset+:
-        daemonset.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms(selectorTerms,),
-
-      statefulset+:
-        statefulset.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms(selectorTerms,),
-
-    },
+    backup+:
+      restic.withNodeSelector(key, value),
+  },
 
   withServiceAccountName(name): {
     deployment+:
@@ -183,11 +156,22 @@
     initContainer+:
       container.withVolumeMountsMixin(this.v),
 
+    local reloader = import 'reloader/main.libsonnet',
     deployment+:
-      kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
+      deployment.metadata.withAnnotationsMixin(
+        reloader.reloadOnSecretsAnnotation(
+          this.tlsVolumeName,
+        ).metadata.annotations
+      )
+      + kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
 
     statefulset+:
-      kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
+      statefulset.metadata.withAnnotationsMixin(
+        reloader.reloadOnSecretsAnnotation(
+          this.tlsVolumeName,
+        ).metadata.annotations
+      )
+      + kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
   },
 
   withInitContainer(container): {
@@ -202,15 +186,19 @@
       statefulset.spec.template.spec.withInitContainers([this.initContainer]),
   },
 
-  // TODO: reintegrate restic
-  // withInitRestore(): {
-  //   local this = self,
-  //   deployment+:
-  //     deployment.spec.template.spec.withInitContainers(restic.withRestoreContainer(this.backup)),
-  //
-  //   statefulset+:
-  //     statefulset.spec.template.spec.withInitContainers(restic.withRestoreContainer(this.backup)),
-  // },
+  withInitRestore(): {
+    local this = self,
+    deployment+:
+      deployment.spec.template.spec.withInitContainers(this.backup.restoreContainer)
+      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
+    ,
+
+    statefulset+:
+      statefulset.spec.template.spec.withInitContainers(this.backup.restoreContainer)
+      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes),
+
+    restic_config: this.backup.resticConfig,
+  },
 
   withInitChown(path, uid, gid):: {
     initContainer+:
@@ -224,9 +212,8 @@
   },
 
   withFsPermissions(uid, gid): {
-    // TODO: reintegrate restic
-    // backup+:
-    //   restic.withFsPermissions(uid, gid),
+    backup+:
+      restic.withFsPermissions(uid, gid),
 
     // This worked for the init container to restore the data, but when starting the another container, root was now not root, so was unable to mkdir in /var/run (owned by root).  Not sure the righ workaround.
 
@@ -236,11 +223,10 @@
     // Aparantly the ownership inside the volume is changed on pod
     // start, but not sure.  Hmm.
 
-
-    // deployment+:
-    //   deployment.spec.template.spec.securityContext.withFsGroup(gid)
-    //   + deployment.spec.template.spec.securityContext.withRunAsGroup(gid)
-    //   + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
+    deployment+:
+      deployment.spec.template.spec.securityContext.withFsGroup(gid)
+      + deployment.spec.template.spec.securityContext.withRunAsGroup(gid)
+      + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
   withSecurityPermissions(uid, gid): {
@@ -274,8 +260,34 @@
       + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
-  withResticBackup(matchers={}): {
-    resticBackup: self.backup,
+  // TODO: we want the app to pass in the bucket, and secretRefName.  If
+  // secretRefData is passed in, create the secret.  Perhaps to avoid conflict
+  // between apps creating the same secret, we could create the secrets in a
+  // way that includes the bucket URL.  In this way as long as the same bucket
+  // were referenced, the credentials would be unique.  But as I type this, I
+  // see that apps may want to use different credentials for the same bucket.
+
+  // withResticBackup enables restic backups for the workload.  The bucketURL
+  // is the root of the bucket, which the app should have read and write access
+  // to.  The secretRefName is the name of the secret that contains the restic
+  // credentials.  The secretRefData is the data to be stored in the secret. If
+  // secretRefData is not provided, the secret will not be created, and the app
+  // is responsible for creating the secret.  The referenced secret or the
+  // secretRefData must contain the `accessKey` and `secretKey` keys.
+  withResticBackup(bucketURL, secretRefName='restic-config', secretRefData={}): {
+    local this = self,
+
+    backup+:
+      restic.withBucketURL(bucketURL)
+      + restic.withSecretRefName(secretRefName)
+      + (
+        if secretRefData != {} then
+          restic.withSecretRefData(secretRefData)
+        else {}
+      )
+    ,
+
+    resticBackup: this.backup,
   },
 
   withMatchLabels(matchers={}): {
@@ -287,9 +299,8 @@
       statefulset.spec.template.metadata.withLabelsMixin(matchers)
       + statefulset.spec.selector.withMatchLabels(matchers),
 
-    // TODO: reintegrate restic
-    // backup+:
-    //   restic.withMatchLabels(matchers),
+    backup+:
+      restic.withMatchLabels(matchers),
   },
 
   withConfigmapMount(mountPath, data, subPath=''): {
@@ -330,34 +341,24 @@
       )
     ,
 
-    daemonset+:
-      daemonset.spec.template.metadata.withAnnotationsMixin({
-        [configHashName]: std.md5(std.toString(data)),
-      })
-      + kausal.util.configVolumeMount(
-        configVolumeName,
-        mountPath,
-        if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)
-      )
-    ,
-
-
-    cronJob+:
+    cronJob+::
       cronJob.spec.jobTemplate.spec.template.spec.withVolumes(
         volume.fromConfigMap(configVolumeName, configVolumeName),
       )
       + {
-        spec+: { jobTemplate+: { spec+: { template+: { spec+: { containers+: [
-          super.containers[0] +
-          container.withVolumeMountsMixin([
+        spec+: { jobTemplate+: { spec+: { template+: { spec+: { containers: [
+          i
+          + container.withVolumeMountsMixin([
             volumeMount.withName(configVolumeName)
             + volumeMount.withMountPath(mountPath),
-          ]),
+          ])
+
+          for i in super.containers
         ] } } } } },
       },
   },
 
-  withLocalDataMount(mountPath='/data'): {
+  withLocalDataMount(mountPath='/data', storageClass='local-path', size='10Gi'): {
     local this = self,
 
     container+:
@@ -372,9 +373,9 @@
 
     dataPvc:
       pvc.new(this.dataVolumeName)
-      + pvc.spec.resources.withRequests({ storage: '10Gi' })
+      + pvc.spec.resources.withRequests({ storage: size })
       + pvc.spec.withAccessModes(['ReadWriteOnce'])
-      + pvc.spec.withStorageClassName('local-path')
+      + pvc.spec.withStorageClassName(storageClass)
       + pvc.mixin.metadata.withLabels({ app: this.appName }),
 
     deployment+:
@@ -391,9 +392,8 @@
         volume.fromPersistentVolumeClaim(self.dataVolumeName, this.dataPvc.metadata.name),
       ]),
 
-    // TODO: reintegrate restic
-    // backup+:
-    //   restic.withPVC(self.pvcFinalName, mountPath),
+    backup+:
+      restic.withPVC(this.pvcFinalName, mountPath),
   },
 
   withCharDevice(volumeName, mountPath, mount=true): {
