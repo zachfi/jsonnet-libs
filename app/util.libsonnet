@@ -139,7 +139,7 @@
     local this = self,
 
     certificate:
-      tls.simpleCert.new(
+      tls.newSimpleCert(
         this.tlsVolumeName,
         issuer,
         '%s.%s.svc.%s' % [this.appName, this.app.namespace, tld],
