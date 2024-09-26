@@ -36,7 +36,7 @@
 
     // Hardcode the name here for re-use by other new() calls.  We only care about the CA certificate.
     certificate:
-      tls.simpleCert.new(this.tlsVolumeName, 'vault-issuer', 'restic.cli.cluster.znet'),
+      tls.newSimpleCert(this.tlsVolumeName, 'vault-issuer', 'restic.cli.cluster.znet'),
 
     containerEnv::
       local repoURL = '%s/%s/%s' % [this.bucketURL, namespace, appName];
