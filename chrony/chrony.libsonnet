@@ -86,6 +86,7 @@
           + this.livenessProbe,
       },
 
+
     server:
       app.new('chrony-server', image, 'time')
       + app.withDeployment()
@@ -158,7 +159,7 @@
       + app.withNodeSelector(nodeKey, nodeValue),
 
     client+:
-      app.withNodeSelector(nodeKey, nodeValue),
+      app.withAntiNodeSelector(nodeKey, nodeValue),
   },
 
   withExternalAddresses(addresses): {

@@ -123,6 +123,24 @@
       restic.withNodeSelector(key, value),
   },
 
+  withAntiNodeSelector(key, value): {
+
+    local terms = nodeSelectorTerm.withMatchExpressions([
+      nodeSelectorRequirement.withKey(key)
+      + nodeSelectorRequirement.withOperator('NotIn')
+      + nodeSelectorRequirement.withValues([value]),
+    ]),
+
+    deployment+:
+      deployment.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms([terms]),
+
+    statefulset+:
+      statefulset.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms([terms]),
+
+    daemonset+:
+      daemonset.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.withNodeSelectorTerms([terms]),
+  },
+
   withServiceAccountName(name): {
     deployment+:
       deployment.spec.template.spec.withServiceAccountName(
@@ -332,6 +350,17 @@
 
     statefulset+:
       statefulset.spec.template.metadata.withAnnotations({
+        [configHashName]: std.md5(std.toString(data)),
+      })
+      + kausal.util.configVolumeMount(
+        configVolumeName,
+        mountPath,
+        if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)
+      )
+    ,
+
+    daemonset+:
+      daemonset.spec.template.metadata.withAnnotationsMixin({
         [configHashName]: std.md5(std.toString(data)),
       })
       + kausal.util.configVolumeMount(
