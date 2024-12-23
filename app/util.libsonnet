@@ -35,6 +35,7 @@
     appName:: appName,
     configVolumeName:: '%s-config' % appName,
     dataVolumeName:: '%s-data' % appName,
+    emptyVolumeName:: '%s-empty' % appName,
 
     // Used to adjust the name that restic will use to attach when a statefulset is used.
     pvcFinalName:: app.dataVolumeName,
@@ -319,6 +320,28 @@
 
     backup+:
       restic.withMatchLabels(matchers),
+  },
+
+  withEmptyMount(mountPath): {
+    local this = self,
+
+    deployment+:
+      kausal.util.emptyVolumeMount(
+        this.emptyVolumeName,
+        mountPath,
+      ),
+
+    statefulset+:
+      kausal.util.emptyVolumeMount(
+        this.emptyVolumeName,
+        mountPath,
+      ),
+
+    daemonset+:
+      kausal.util.emptyVolumeMount(
+        this.emptyVolumeName,
+        mountPath,
+      ),
   },
 
   withConfigmapMount(mountPath, data, subPath=''): {

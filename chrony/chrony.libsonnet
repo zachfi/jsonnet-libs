@@ -7,6 +7,8 @@
   local container = k.core.v1.container,
   local containerPort = k.core.v1.containerPort,
   local volumeMount = k.core.v1.volumeMount,
+  local deployment = k.apps.v1.deployment,
+  local volume = k.core.v1.volume,
 
   local app_name = 'chrony',
 
@@ -20,6 +22,7 @@
     gpsDeviceVolumeName:: 'gps-device',
     chronyClientConfigVolumeName:: 'chrony-client-config',
     chronyServerConfigVolumeName:: 'chrony-server-config',
+    // emptyVolumeName:: 'time-run',
 
     local clientData = {
       'chrony.conf': this.clientConfig,
@@ -56,10 +59,24 @@
       makestep .1 -1
 
       allow
+      rtcsync
 
-      #refclock SOCK /run/chrony.ttyACM0.sock refid GPS  precision 1e-3 offset 0.011
-      #refclock SOCK /run/chrony.pps0.sock    refid PPS  precision 1e-7
-      refclock SHM  0                        refid NMEA precision 1e-3 poll 3 offset 0.011 
+      # gpsd looks for this path: /@RUNDIR@/chrony.XXX.sock
+      # /var/run is a symlink to /run
+      #refclock SOCK /run/chrony.ttyACM0.sock refid GPS precision 1e-3 offset 0.000
+      #refclock SOCK /run/chrony.ttyACM0.sock refid GPS precision 1e-1 offset 0.9999
+      #refclock SOCK /run/chrony.ttyACM0.sock refid PPS precision 1e-7
+
+      # refclock SOCK /run/chrony.pps0.sock    refid PPS  precision 1e-7
+      #refclock SHM 0 refid NMEA offset 0.000 precision 1e-3 poll 3 noselect
+      # refclock SHM 0  delay 0.5 refid NMEA
+      # SHM1 from gpsd (if present) is from the kernel PPS_LDISC
+      # module.  It includes PPS and will be accurate to a few ns
+      # refclock SHM 1 offset 0.0 delay 0.1 refid NMEA2
+      # refclock PPS /run/pps0 refid PPS
+
+      refclock SHM 0 refid GPS precision 1e-1 offset 0.9999 delay 0.2
+      refclock SHM 1 refid PPS precision 1e-7
     |||,
 
     client:
@@ -86,7 +103,6 @@
           + this.livenessProbe,
       },
 
-
     server:
       app.new('chrony-server', image, 'time')
       + app.withDeployment()
@@ -106,7 +122,7 @@
             '-f',
             '/etc/chrony.conf',
           ])
-          + container.mixin.securityContext.capabilities.withAdd('SYS_TIME')
+          + container.securityContext.capabilities.withAdd('SYS_TIME')
           + this.limits
           + this.readinessProbe
           + this.livenessProbe,
@@ -114,7 +130,7 @@
 
     readinessProbe::
       container.readinessProbe.exec.withCommand(['chronyc', 'tracking'])
-      + container.mixin.readinessProbe.withInitialDelaySeconds(10)
+      + container.mixin.readinessProbe.withInitialDelaySeconds(3)
       + container.mixin.readinessProbe.withPeriodSeconds(30)
       + container.mixin.readinessProbe.withTimeoutSeconds(5),
 
@@ -135,28 +151,43 @@
     gpsdContainer::
       container.new('gpsd', image)
       + container.withImagePullPolicy('Always')
+      // + container.withCommand('/usr/sbin/gpsd')
+      + container.withCommand(['sh', '-c'])
+      // + container.withArgs([
+      //   '-Nn',
+      //   // '-b',
+      //   // '-N',
+      //   // '-n',
+      //   // '-G',
+      //   '-D2',
+      //   // '-F',
+      //   // '/run/gpsd.sock',
+      //   device,
+      // ])
       + container.withArgs([
-        'gpsd',
-        '-b',
-        '-N',
-        '-n',
-        '-G',
-        '-D',
-        '5',
-        '-F',
-        '/run/gpsd.sock',
-        device,
+        'sleep 10; echo "Starting"; gpsdebuginfo; gpsd -nN -D0 -F/run/gpsd.sock -r %s' % device,
       ])
       + container.securityContext.withPrivileged(true)
+      + container.securityContext.withRunAsUser(0)
+      + container.securityContext.withRunAsGroup(0)
+      + container.securityContext.capabilities.withAdd('SYS_TIME')
       + container.withVolumeMounts([
         volumeMount.new(localtime_file, '/etc/localtime', true),
         volumeMount.new(this.gpsDeviceVolumeName, device),
+        // volumeMount.new(this.emptyVolumeName, '/run'),
       ]),
 
     server+:
       app.withContainer('gpsd', this.gpsdContainer)
       + app.withCharDevice(this.gpsDeviceVolumeName, device, false)
-      + app.withNodeSelector(nodeKey, nodeValue),
+      + app.withNodeSelector(nodeKey, nodeValue)
+      + app.withEmptyMount('/run')
+      + {
+        deployment+::
+          deployment.spec.strategy.rollingUpdate.withMaxSurge(0)
+          + deployment.spec.strategy.rollingUpdate.withMaxUnavailable(1),
+      }
+    ,
 
     client+:
       app.withAntiNodeSelector(nodeKey, nodeValue),
