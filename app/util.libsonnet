@@ -181,8 +181,7 @@
       ),
 
     v::
-      volumeMount.withName(this.tlsVolumeName)
-      + volumeMount.withMountPath(mountPath),
+      volumeMount.new(this.tlsVolumeName, mountPath),
 
     // container+:
     //   container.withVolumeMountsMixin(this.v),
@@ -190,22 +189,25 @@
     initContainer+:
       container.withVolumeMountsMixin(this.v),
 
+    container+:
+      container.withVolumeMountsMixin(this.v),
+
     local reloader = import 'reloader/main.libsonnet',
     deployment+:
       deployment.metadata.withAnnotationsMixin(
-        reloader.reloadOnSecretsAnnotation(
-          this.tlsVolumeName,
-        ).metadata.annotations
+        reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations
       )
-      + kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
+      + deployment.spec.template.spec.withVolumesMixin([
+        volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
+      ]),
 
     statefulset+:
       statefulset.metadata.withAnnotationsMixin(
-        reloader.reloadOnSecretsAnnotation(
-          this.tlsVolumeName,
-        ).metadata.annotations
+        reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations
       )
-      + kausal.util.secretVolumeMount(this.tlsVolumeName, mountPath),
+      + statefulset.spec.template.spec.withVolumesMixin([
+        volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
+      ]),
   },
 
   withInitContainer(container): {
@@ -249,13 +251,20 @@
     backup+:
       restic.withFsPermissions(uid, gid),
 
-    // This worked for the init container to restore the data, but when starting the another container, root was now not root, so was unable to mkdir in /var/run (owned by root).  Not sure the righ workaround.
+    // This worked for the init container to restore the data, but when
+    // starting the another container, root was now not root, so was unable to
+    // mkdir in /var/run (owned by root).  Not sure the righ workaround.
 
     // 2024-01-29T02:04:26+0000
     // Had to comment this again for media.
     // https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
     // Aparantly the ownership inside the volume is changed on pod
     // start, but not sure.  Hmm.
+
+    statefulset+:
+      statefulset.spec.template.spec.securityContext.withFsGroup(gid)
+      + statefulset.spec.template.spec.securityContext.withRunAsGroup(gid)
+      + statefulset.spec.template.spec.securityContext.withRunAsUser(uid),
 
     deployment+:
       deployment.spec.template.spec.securityContext.withFsGroup(gid)
@@ -337,11 +346,15 @@
       restic.withMatchLabels(matchers),
   },
 
-  withConfigmapMount(mountPath, data, subPath=''): {
+  withConfigmapMount(mountPath, data, subPath='', nameOverride=''): {
     local this = self,
 
     local configHashName = if std.isEmpty(subPath) then 'config_hash' else (std.strReplace(subPath, '.', '_') + '_hash'),
-    local configVolumeName = if std.isEmpty(subPath) then this.configVolumeName else (this.configVolumeName + '-' + std.strReplace(subPath, '.', '')),
+
+
+    local configVolumeName = if std.isEmpty(nameOverride) then
+      (if std.isEmpty(subPath) then this.configVolumeName else (this.configVolumeName + '-' + std.strReplace(subPath, '.', '')))
+    else nameOverride,
 
     ['configmap_config' + subPath]:
       configMap.new(configVolumeName)
