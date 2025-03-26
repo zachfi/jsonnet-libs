@@ -123,6 +123,22 @@
       restic.withNodeSelector(key, value),
   },
 
+  withSelector(hsh={}): {
+    deployment+:
+      deployment.spec.selector.withMatchLabels(hsh)
+      + deployment.spec.template.metadata.withLabels(hsh)
+    ,
+
+    statefulset+:
+      statefulset.spec.selector.withMatchLabels(hsh)
+      + statefulset.spec.template.metadata.withLabels(hsh),
+
+
+    daemonset+:
+      daemonset.spec.selector.withMatchLabels(hsh)
+      + daemonset.spec.template.metadata.withLabels(hsh),
+  },
+
   withAntiNodeSelector(key, value): {
 
     local terms = nodeSelectorTerm.withMatchExpressions([
