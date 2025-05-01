@@ -5,7 +5,7 @@
 
   local configMap = k.core.v1.configMap,
   local container = k.core.v1.container,
-  local containerPort = kausal.core.v1.containerPort,
+  local containerPort = k.core.v1.containerPort,
   local cronJob = k.batch.v1.cronJob,
   local daemonset = k.apps.v1.daemonSet,
   local deployment = k.apps.v1.deployment,
@@ -572,7 +572,7 @@
     exporter_container::
       container.new('exporter', image)
       + container.withPorts([
-        containerPort.new('http-metrics', port),
+        containerPort.newNamed(port, 'http-metrics'),
       ])
       + container.withArgs(args)
       + container.withEnvMixin(env)
