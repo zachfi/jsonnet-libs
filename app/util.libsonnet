@@ -23,7 +23,7 @@
   local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
 
   new(appName, image, namespace): {
-    local app = self,
+    local this = self,
 
     // A few internal variables
 
@@ -35,57 +35,65 @@
     appName:: appName,
     configVolumeName:: '%s-config' % appName,
     dataVolumeName:: '%s-data' % appName,
-
-    // Used to adjust the name that restic will use to attach when a statefulset is used.
-    pvcFinalName:: app.dataVolumeName,
-
     tlsVolumeName:: '%s-tls' % appName,
 
-    // The initial objects to be modified by the function calls below
+    // The initial objects to be modified by the function calls.
 
+    // pv and pvc are used to create a persistent volume and claim.
     pv: [],
     pvc: [],
 
-    container::
-      container.new(appName, image)
-      + container.withImagePullPolicy('IfNotPresent'),
+    // volumes and mounts are realized by the default workload objects.
+    volumes:: [],
+    mounts:: [],
 
-    initContainer:: {},
+    defaultContainer(name, image)::
+      container.new(name, image)
+      + container.withImagePullPolicy('IfNotPresent')
+      + container.withVolumeMounts(this.mounts)
+    ,
 
+    extraContainers:: [],
+    container:: this.defaultContainer(appName, image),
+    initContainer:: this.defaultContainer('init', image),
+
+    svcPorts:: [],
     svc::
-      kausal.util.serviceFor(app.workload)
+      service.new(appName, this.workload.spec.selector.matchLabels, this.svcPorts)
+      + service.metadata.withLabels({ name: appName })
       + service.spec.withIpFamilyPolicy('RequireDualStack')
-      + service.spec.withIpFamilies(['IPv6', 'IPv4']),
+      + service.spec.withIpFamilies(['IPv6', 'IPv4'])
+    ,
+
+    annotations:: {
+      container_hash: std.md5(std.toString(this.container)),
+    },
 
     deployment::
-      deployment.new(
-        appName,
-        1,
-        app.container,
-      )
-      + deployment.spec.template.metadata.withAnnotationsMixin({
-        container_hash: std.md5(std.toString(app.container)),
-      })
+      deployment.new(appName, 1, this.container,)
+      + deployment.spec.template.metadata.withAnnotations(this.annotations)
       + deployment.spec.strategy.rollingUpdate.withMaxSurge(0)
       + deployment.spec.strategy.rollingUpdate.withMaxUnavailable(1)
-      + deployment.spec.template.spec.withTerminationGracePeriodSeconds(45),
+      + deployment.spec.template.spec.withTerminationGracePeriodSeconds(45)
+      + deployment.spec.template.spec.withContainers([this.container] + this.extraContainers)
+      + deployment.spec.template.spec.withVolumes(this.volumes)
+    ,
 
     statefulset::
-      statefulset.new(
-        appName,
-        1,
-        app.container,
-      )
-      + statefulset.mixin.spec.template.metadata.withAnnotations({
-        container_hash: std.md5(std.toString(app.container)),
-      })
-      + statefulset.mixin.spec.withServiceName(appName),
+      statefulset.new(appName, 1, this.container,)
+      + statefulset.spec.withServiceName(appName)
+      + statefulset.spec.template.metadata.withAnnotations(this.annotations)
+      + statefulset.spec.updateStrategy.rollingUpdate.withMaxUnavailable(1)
+      + statefulset.spec.template.spec.withContainers([this.container] + this.extraContainers)
+      + statefulset.spec.template.spec.withVolumes(this.volumes)
+    ,
 
     daemonset::
-      daemonset.new(
-        appName,
-        app.container,
-      ),
+      daemonset.new(appName, this.container,)
+      + daemonset.spec.template.metadata.withAnnotations(this.annotations)
+      + daemonset.spec.template.spec.withContainers([this.container] + this.extraContainers)
+      + daemonset.spec.template.spec.withVolumes(this.volumes)
+    ,
 
     cronJob::
       local this = self;
@@ -98,9 +106,6 @@
       local this = self;
       restic.new(this.appName, this.app.namespace),
 
-    // Use withResticBackup() to enable restic backups for the workload.
-    resticBackup: {},
-
     // Workload is used to define the overall replicaset.  This allows
     // functions to modify the behavior of both the statefulset and deployment
     // keys, without knowing which one will be used in the end.  Use
@@ -109,30 +114,31 @@
     workload: {},
   },
 
-  withNodeSelector(key, value): {
+  withNodeSelector(hsh): {
     deployment+:
-      deployment.spec.template.spec.withNodeSelector({ [key]: value }),
+      deployment.spec.template.spec.withNodeSelector(hsh),
 
     statefulset+:
-      statefulset.spec.template.spec.withNodeSelector({ [key]: value }),
+      statefulset.spec.template.spec.withNodeSelector(hsh),
 
     daemonset+:
-      daemonset.spec.template.spec.withNodeSelector({ [key]: value }),
+      daemonset.spec.template.spec.withNodeSelector(hsh),
+
+    cronJob+:
+      cronJob.spec.template.spec.withNodeSelector(hsh),
 
     backup+:
-      restic.withNodeSelector(key, value),
+      restic.withNodeSelector(hsh),
   },
 
   withSelector(hsh={}): {
     deployment+:
       deployment.spec.selector.withMatchLabels(hsh)
-      + deployment.spec.template.metadata.withLabels(hsh)
-    ,
+      + deployment.spec.template.metadata.withLabels(hsh),
 
     statefulset+:
       statefulset.spec.selector.withMatchLabels(hsh)
       + statefulset.spec.template.metadata.withLabels(hsh),
-
 
     daemonset+:
       daemonset.spec.selector.withMatchLabels(hsh)
@@ -163,6 +169,12 @@
         name
       ),
 
+    // TODO:
+    // statefulset+:
+    //   statefulset.spec.template.spec.withServiceAccountName(
+    //     name
+    //   ),
+
     daemonset+:
       daemonset.spec.template.spec.withServiceAccountName(
         name
@@ -180,46 +192,165 @@
         altNames
       ),
 
-    v::
+    mounts+: [
       volumeMount.new(this.tlsVolumeName, mountPath),
+    ],
 
-    // container+:
-    //   container.withVolumeMountsMixin(this.v),
-
-    initContainer+:
-      container.withVolumeMountsMixin(this.v),
-
-    container+:
-      container.withVolumeMountsMixin(this.v),
+    volumes+: [
+      volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
+    ],
 
     local reloader = import 'reloader/main.libsonnet',
-    deployment+:
-      deployment.metadata.withAnnotationsMixin(
-        reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations
-      )
-      + deployment.spec.template.spec.withVolumesMixin([
-        volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
-      ]),
-
-    statefulset+:
-      statefulset.metadata.withAnnotationsMixin(
-        reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations
-      )
-      + statefulset.spec.template.spec.withVolumesMixin([
-        volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
-      ]),
+    annotations+: reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations,
   },
 
   withInitContainer(container): {
     local this = self,
 
-    initContainer: container,
+    initContainer+:: container,
 
     deployment+:
-      deployment.spec.template.spec.withInitContainers([this.initContainer]),
+      deployment.spec.template.spec.withInitContainers([this.initContainer])
+      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes),
 
     statefulset+:
-      statefulset.spec.template.spec.withInitContainers([this.initContainer]),
+      statefulset.spec.template.spec.withInitContainers([this.initContainer])
+      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
+  },
+
+  // withInitRestoreSleep is used to add a sleep container to the init which
+  // can be used to manually with restic.
+  withInitRestoreSleep(): {
+    local this = self,
+
+    sleepContainerSeconds:: '100',
+
+    sleepContainer+::
+      this.backup.restoreContainer
+      + container.withCommand('sleep')
+      + container.withArgs([this.sleepContainerSeconds]),
+
+    deployment+:
+      deployment.spec.template.spec.withInitContainers(this.sleepContainer)
+      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
+    ,
+
+    statefulset+:
+      statefulset.spec.template.spec.withInitContainers(this.sleepContainer)
+      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
+  },
+
+  // TODO: we should receive a container, in the case of restic, recieve the
+  // container and then mount the configmap scripts to loop and perform the
+  // backup.
+  // The received container must include the /bin/bash binary.
+  withCronSidecarContainer(c, hook='', interval=10000, path='/scripts'):: {
+    local this = self,
+    local name = '%s-%s' % [this.appName, c.name],
+
+    sidecarCronConfigMaps+: [
+      configMap.new(name)
+      + configMap.withData({
+        'cron.sh': |||
+          #! /bin/bash
+          while true; do
+            sleep %(s)d
+            bash %(scripts)s/hook.sh
+          done
+        ||| % { s: interval, scripts: path },
+        'hook.sh': hook,
+      }),
+    ],
+
+
+    mounts+: [
+      volumeMount.new(name, path),
+    ],
+
+    volumes+: [
+      volume.fromConfigMap(name, name),
+    ],
+
+
+    // BUG: this is not working, the container is not being added to the
+    extraContainers+: [
+      c
+      + container.withVolumeMountsMixin(this.mounts)
+      + container.withCommand(['/bin/bash'])
+      + container.withArgs([
+        '%(scripts)s/cron.sh' % { scripts: path },
+      ]),
+    ],
+
+    annotations+: {
+      [name + '_cron_container_hash']: std.md5(std.toString(c)),
+    },
+  },
+
+  // withCronSidecar adds a cron sidecar to the deployment or statefulset.
+  // This should be after all modifications to container have been made, since
+  // we copy container as a base.
+  withCronSidecar(name, image, hook='', sleep=10000):: {
+    local this = self,
+
+    // TODO: this appears to be unused
+    sidecarCronConfigMaps+: [
+      configMap.new(name)
+      + configMap.withData({
+        'cron.sh': |||
+          #! /bin/bash
+          while true; do
+            sleep %(s)d
+            bash /scripts/hook.sh
+          done
+        ||| % { s: sleep },
+        'hook.sh': hook,
+      }),
+    ],
+
+    local cronContainer =
+      this.defaultContainer(name, image)
+      + container.withVolumeMountsMixin([
+        volumeMount.new(name, '/scripts'),
+      ])
+      + container.withCommand(['/bin/bash'])
+      + container.withArgs([
+        '/scripts/cron.sh',
+      ]),
+
+    extraContainers+: [cronContainer],
+
+    deployment+:
+      deployment.spec.template.spec.withVolumesMixin([
+        volume.fromConfigMap(name, name),
+      ])
+      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
+      + deployment.spec.template.metadata.withAnnotationsMixin({
+        [name + '_cron_container_hash']: std.md5(std.toString(cronContainer)),
+      }),
+
+    statefulset+:
+      statefulset.spec.template.spec.withVolumesMixin([
+        volume.fromConfigMap(name, name),
+      ])
+      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes)
+      + statefulset.spec.template.metadata.withAnnotationsMixin({
+        [name + '_cron_container_hash']: std.md5(std.toString(cronContainer)),
+      }),
+  },
+
+  withRunAsNonRoot():: {
+    local this = self,
+
+    container+:
+      container.securityContext.withRunAsNonRoot(true),
+
+    deployment+:
+      deployment.spec.template.spec.securityContext.withRunAsNonRoot(true),
+
+    statefulset+:
+      statefulset.spec.template.spec.securityContext.withRunAsNonRoot(true),
+
   },
 
   withInitRestore(): {
@@ -231,9 +362,7 @@
 
     statefulset+:
       statefulset.spec.template.spec.withInitContainers(this.backup.restoreContainer)
-      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes),
-
-    restic_config: this.backup.resticConfig,
+      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
   },
 
   withInitChown(path, uid, gid):: {
@@ -277,6 +406,21 @@
     // + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
+  withService(): {
+    local this = self,
+
+    service:
+      this.svc,
+  },
+
+  withServicePorts(ports=[]): {
+    local this = self,
+    svcPorts+: ports,
+
+    svc+:
+      service.spec.withPorts(this.svcPorts),
+  },
+
   withInetOnly(): {
     svc+:
       service.spec.withIpFamilyPolicy('SingleStack')
@@ -289,6 +433,11 @@
       + service.spec.withIpFamilies(['IPv6']),
   },
 
+  withSessionAffinity(affinity='ClientIP'): {
+    svc+:
+      service.spec.withSessionAffinity(affinity),
+  },
+
   withExternalAddresses(addresses=[]): {
     svc+:
       service.spec.withExternalIPs(addresses),
@@ -299,6 +448,7 @@
       deployment.spec.template.spec.securityContext.withFsGroup(gid)
       + deployment.spec.template.spec.securityContext.withRunAsGroup(gid)
       + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
+
   },
 
   // TODO: we want the app to pass in the bucket, and secretRefName.  If
@@ -308,25 +458,31 @@
   // were referenced, the credentials would be unique.  But as I type this, I
   // see that apps may want to use different credentials for the same bucket.
 
-  // withResticBackup enables restic backups for the workload.  The bucketURL
-  // is the root of the bucket, which the app should have read and write access
-  // to.  The secretRefName is the name of the secret that contains the restic
-  // credentials.  The secretRefData is the data to be stored in the secret. If
-  // secretRefData is not provided, the secret will not be created, and the app
-  // is responsible for creating the secret.  The referenced secret or the
-  // secretRefData must contain the `accessKey` and `secretKey` keys.
-  withResticBackup(bucketURL, secretRefName='restic-config', secretRefData={}): {
+  // withResticS3Backup enables restic backups to s3 for the workload.  The
+  // bucketURL is the root of the bucket, which the app should have read and
+  // write access to.  The secretRefName is the name of the secret that
+  // contains the restic credentials.  The secretRefData is the data to be
+  // stored in the secret. If secretRefData is not provided, the secret will
+  // not be created, and the app is responsible for creating the secret.  The
+  // referenced secret or the secretRefData must contain the `accessKey` and
+  // `secretKey` keys.
+  withResticS3Backup(bucketURL, secretRefName='restic-config', secretRefData={}, image='zalegrala/restic:latest'): {
     local this = self,
 
+    local refName = '%s-%s' % [this.appName, secretRefName],
+
     backup+:
-      restic.withBucketURL(bucketURL)
-      + restic.withSecretRefName(secretRefName)
-      + (
-        if secretRefData != {} then
-          restic.withSecretRefData(secretRefData)
-        else {}
-      )
+      restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
+      + restic.withImage(image)
     ,
+
+    volumes+: this.backup.volumes,
+
+    // mounts+: this.backup.mounts,
+
+    // volumes+: [
+    //   volume.fromSecret(refName, refName),
+    // ] + this.backup.volumes,
 
     resticBackup: this.backup,
   },
@@ -349,54 +505,33 @@
 
     local configHashName = if std.isEmpty(subPath) then 'config_hash' else (std.strReplace(subPath, '.', '_') + '_hash'),
 
+    local configVolumeName =
+      if std.isEmpty(nameOverride)
+      then
+        (
+          if std.isEmpty(subPath)
+          then
+            this.configVolumeName
+          else
+            (this.configVolumeName + '-' + std.strReplace(subPath, '.', ''))
+        )
+      else nameOverride,
 
-    local configVolumeName = if std.isEmpty(nameOverride) then
-      (if std.isEmpty(subPath) then this.configVolumeName else (this.configVolumeName + '-' + std.strReplace(subPath, '.', '')))
-    else nameOverride,
-
-    ['configmap_config' + subPath]:
+    ['configmap_config_%s_%s' % [subPath, nameOverride]]:
       configMap.new(configVolumeName)
       + configMap.withData(data),
 
-    // container+:
-    //   container.withVolumeMountsMixin([
-    //     volumeMount.withName(this.configVolumeName)
-    //     + volumeMount.withMountPath(mountPath),
-    //   ]),
+    mounts+: [
+      volumeMount.withName(configVolumeName)
+      + volumeMount.withMountPath(mountPath)
+      + (if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)),
+    ],
 
-    deployment+:
-      deployment.spec.template.metadata.withAnnotationsMixin({
-        [configHashName]: std.md5(std.toString(data)),
-      })
-      + kausal.util.configVolumeMount(
-        configVolumeName,
-        mountPath,
-        if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)
-      )
-    ,
+    volumes+: [
+      volume.fromConfigMap(configVolumeName, configVolumeName),
+    ],
 
-    statefulset+:
-      statefulset.spec.template.metadata.withAnnotations({
-        [configHashName]: std.md5(std.toString(data)),
-      })
-      + kausal.util.configVolumeMount(
-        configVolumeName,
-        mountPath,
-        if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)
-      )
-    ,
-
-    daemonset+:
-      daemonset.spec.template.metadata.withAnnotationsMixin({
-        [configHashName]: std.md5(std.toString(data)),
-      })
-      + kausal.util.configVolumeMount(
-        configVolumeName,
-        mountPath,
-        if std.isEmpty(subPath) then {} else volumeMount.withSubPath(subPath)
-      )
-    ,
-
+    // TODO: move cron volumeMount to the mounts and volumes pattern above.
     cronJob+::
       cronJob.spec.jobTemplate.spec.template.spec.withVolumes(
         volume.fromConfigMap(configVolumeName, configVolumeName),
@@ -417,39 +552,27 @@
   withLocalDataMount(mountPath='/data', storageClass='local-path', size='10Gi'): {
     local this = self,
 
-    container+:
-      container.withVolumeMountsMixin([
-        volumeMount.new(self.dataVolumeName, mountPath),
-      ]),
+    mounts+: [
+      volumeMount.new(this.dataVolumeName, mountPath),
+    ],
 
-    initContainer+:
-      container.withVolumeMountsMixin([
-        volumeMount.new(self.dataVolumeName, mountPath),
-      ]),
+    volumes+: [
+      volume.fromPersistentVolumeClaim(this.dataVolumeName, this.dataVolumeName),
+    ],
 
     dataPvc:
       pvc.new(this.dataVolumeName)
       + pvc.spec.resources.withRequests({ storage: size })
       + pvc.spec.withAccessModes(['ReadWriteOnce'])
       + pvc.spec.withStorageClassName(storageClass)
-      + pvc.mixin.metadata.withLabels({ app: this.appName }),
-
-    deployment+:
-      deployment.spec.template.spec.withVolumesMixin([
-        volume.fromPersistentVolumeClaim(self.dataVolumeName, this.dataPvc.metadata.name),
-      ]),
+      + pvc.metadata.withLabels({ app: this.appName }),
 
     statefulset+:
-      statefulset.spec.withVolumeClaimTemplatesMixin(
-        this.dataPvc
-      )
-
-      + statefulset.spec.template.spec.withVolumesMixin([
-        volume.fromPersistentVolumeClaim(self.dataVolumeName, this.dataPvc.metadata.name),
-      ]),
+      statefulset.spec.withVolumeClaimTemplatesMixin(this.dataPvc),
 
     backup+:
-      restic.withPVC(this.pvcFinalName, mountPath),
+      //   // restic.withPVC(this.dataVolumeName + '-ldap-1', mountPath),
+      restic.withPVC(this.dataVolumeName, mountPath),
   },
 
   withCharDevice(volumeName, mountPath, mount=true): {
@@ -457,70 +580,44 @@
 
     // Disabling mount is useful when withContainers() includes additional
     // contianers and not all contianers need the char device.
-    container+:
+    mounts+: (
       if mount then
-        container.withVolumeMountsMixin([
-          volumeMount.new(volumeName, mountPath),
-        ])
-      else {},
+        [volumeMount.new(volumeName, mountPath)]
+      else []
+    ),
 
-    deployment+:
-      deployment.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath)
-        + volume.hostPath.withType('CharDevice'),
-      ]),
-
-    statefulset+:
-      statefulset.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath)
-        + volume.hostPath.withType('CharDevice'),
-      ]),
+    volumes+: [
+      volume.fromHostPath(volumeName, mountPath)
+      + volume.hostPath.withType('CharDevice'),
+    ],
   },
 
   withHostMount(volumeName, mountPath, readOnly=true): {
     local this = self,
 
-    container+:
-      container.withVolumeMountsMixin([
-        volumeMount.new(volumeName, mountPath, readOnly),
-      ]),
+    mounts+: [
+      volumeMount.new(volumeName, mountPath, readOnly),
+    ],
 
-    deployment+:
-      deployment.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath),
-      ]),
-
-    daemonset+:
-      daemonset.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath),
-      ]),
-
-    statefulset+:
-      statefulset.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath),
-      ]),
-
-    cronJob+:
-      cronJob.spec.jobTemplate.spec.template.spec.withVolumesMixin([
-        volume.fromHostPath(volumeName, mountPath),
-      ]),
-
-
+    volumes+: [
+      volume.fromHostPath(volumeName, mountPath)
+      + volume.hostPath.withType('DirectoryOrCreate'),
+    ],
   },
 
   withDeployment(): {
-    workload: self.deployment,
-    service: self.svc,
+    local this = self,
+    workload: this.deployment,
   },
 
   withStatefulSet(): {
-    workload: self.statefulset,
-    service: self.svc,
-    pvcFinalName: '%s-%s-0' % [self.dataVolumeName, self.appName],
+    local this = self,
+    workload: this.statefulset,
   },
 
   withDaemonSet(): {
-    workload: self.daemonset,
+    local this = self,
+    workload: this.daemonset,
   },
 
   withNvidia(): {
@@ -537,6 +634,11 @@
           envVar.new('NVIDIA_DRIVER_CAPABILITIES', 'all'),
         ]
       ),
+  },
+
+  withEnvironmentMixin(env):: {
+    container+:
+      container.withEnvMixin(env),
   },
 
   withCron(schedule='0 * * * *'): {
@@ -569,7 +671,7 @@
   withExporter(image, port, env=[], args=[]): {
     local this = self,
 
-    exporter_container::
+    exporterContainer::
       container.new('exporter', image)
       + container.withPorts([
         containerPort.newNamed(port, 'http-metrics'),
@@ -581,10 +683,10 @@
 
     deployment+::
       deployment.spec.template.metadata.withAnnotationsMixin({
-        exporter_container_hash: std.md5(std.toString(this.exporter_container)),
+        exporter_container_hash: std.md5(std.toString(this.exporterContainer)),
       })
       + deployment.spec.template.spec.withContainersMixin(
-        this.exporter_container
+        this.exporterContainer
       ),
   },
 
@@ -619,17 +721,16 @@
       + pvc.mixin.spec.withStorageClassName(''),
     ],
 
-    container+::
-      container.withVolumeMountsMixin([
-        volumeMount.new(volumeName, mountPath),
-      ]),
+    mounts+: [
+      volumeMount.new(volumeName, mountPath),
+    ],
 
-    deployment+::
-      deployment.mixin.spec.template.spec.withVolumesMixin([
-        volume.withName(volumeName)
-        + volume.nfs.withPath(nfsPath)
-        + volume.nfs.withServer(nfsServer),
-      ]),
+    volumes+: [
+      // volume.fromPersistentVolumeClaim(volumeName, volumeName),
+      volume.withName(volumeName)
+      + volume.nfs.withPath(nfsPath)
+      + volume.nfs.withServer(nfsServer),
+    ],
   },
 
   withReplicas(replicas): {
@@ -640,15 +741,13 @@
       statefulset.spec.withReplicas(replicas),
   },
 
-  withServicePorts(ports=[]): {
-    svc+:
-      service.spec.withPortsMixin(
-        ports
-      ),
-  },
-
   withPullPolicy(policy='IfNotPresent'): {
     container+:
       container.withImagePullPolicy(policy),
+
+    extraContainers:: [
+      c + container.withImagePullPolicy(policy)
+      for c in super.extraContainers
+    ],
   },
 }
