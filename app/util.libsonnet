@@ -263,12 +263,10 @@
 
     statefulset+:
       statefulset.spec.template.spec.securityContext.withFsGroup(gid)
-      + statefulset.spec.template.spec.securityContext.withRunAsGroup(gid)
       + statefulset.spec.template.spec.securityContext.withRunAsUser(uid),
 
     deployment+:
       deployment.spec.template.spec.securityContext.withFsGroup(gid)
-      + deployment.spec.template.spec.securityContext.withRunAsGroup(gid)
       + deployment.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
