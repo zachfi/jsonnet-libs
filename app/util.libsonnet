@@ -267,10 +267,10 @@
   withCronSidecarContainer(c, hook='', interval=10000, path='/scripts'):: {
     local this = self,
     local name = '%s-%s' % [this.appName, c.name],
-    local volumeName = '%s-scripts' % name,
+    local volumeName = '%s-cron' % name,
 
     sidecarCronConfigMaps+: [
-      configMap.new(name)
+      configMap.new(volumeName)
       + configMap.withData({
         'cron.sh': |||
           #! /bin/bash
@@ -288,7 +288,7 @@
 
     // The volume needs to be included on the workload we can mount it in this container.
     volumes+: [
-      volume.fromConfigMap(name, name),
+      volume.fromConfigMap(volumeName, volumeName),
     ],
 
     extraContainers+: [
@@ -310,7 +310,7 @@
   // we copy container as a base.
   withCronSidecar(name, image, hook='', sleep=10000, path='/scripts'):: {
     local this = self,
-    local volumeName = '%s-scripts' % name,
+    local volumeName = '%s-cron' % name,
 
     // TODO: this appears to be unused
     sidecarCronConfigMaps+: [
