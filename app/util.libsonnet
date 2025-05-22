@@ -592,7 +592,7 @@
     ],
   },
 
-  withHostMount(volumeName, mountPath, readOnly=true): {
+  withHostMount(volumeName, mountPath, readOnly=true, type=''): {
     local this = self,
 
     mounts+: [
@@ -601,7 +601,7 @@
 
     volumes+: [
       volume.fromHostPath(volumeName, mountPath)
-      + volume.hostPath.withType('DirectoryOrCreate'),
+      + volume.hostPath.withType(type),
     ],
   },
 
