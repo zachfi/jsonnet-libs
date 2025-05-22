@@ -267,6 +267,7 @@
   withCronSidecarContainer(c, hook='', interval=10000, path='/scripts'):: {
     local this = self,
     local name = '%s-%s' % [this.appName, c.name],
+    local volumeName = '%s-scripts' % name,
 
     sidecarCronConfigMaps+: [
       configMap.new(name)
@@ -282,20 +283,17 @@
       }),
     ],
 
+    // The mount is intended to only used by this container.
+    local containerMount = volumeMount.new(volumeName, path),
 
-    mounts+: [
-      volumeMount.new(name, path),
-    ],
-
+    // The volume needs to be included on the workload we can mount it in this container.
     volumes+: [
       volume.fromConfigMap(name, name),
     ],
 
-
-    // BUG: this is not working, the container is not being added to the
     extraContainers+: [
       c
-      + container.withVolumeMountsMixin(this.mounts)
+      + container.withVolumeMountsMixin(this.mounts + [containerMount])
       + container.withCommand(['/bin/bash'])
       + container.withArgs([
         '%(scripts)s/cron.sh' % { scripts: path },
@@ -310,12 +308,13 @@
   // withCronSidecar adds a cron sidecar to the deployment or statefulset.
   // This should be after all modifications to container have been made, since
   // we copy container as a base.
-  withCronSidecar(name, image, hook='', sleep=10000):: {
+  withCronSidecar(name, image, hook='', sleep=10000, path='/scripts'):: {
     local this = self,
+    local volumeName = '%s-scripts' % name,
 
     // TODO: this appears to be unused
     sidecarCronConfigMaps+: [
-      configMap.new(name)
+      configMap.new(volumeName)
       + configMap.withData({
         'cron.sh': |||
           #! /bin/bash
@@ -330,33 +329,25 @@
 
     local cronContainer =
       this.defaultContainer(name, image)
-      + container.withVolumeMountsMixin([
-        volumeMount.new(name, '/scripts'),
-      ])
       + container.withCommand(['/bin/bash'])
       + container.withArgs([
-        '/scripts/cron.sh',
-      ]),
+        '%s/cron.sh' % path,
+      ])
+      + container.withVolumeMountsMixin([
+        volumeMount.new(volumeName, path),
+      ])
+    ,
+
+    // The volume needs to be included on the workload we can mount it in this container.
+    volumes+: [
+      volume.fromConfigMap(volumeName, volumeName),
+    ],
 
     extraContainers+: [cronContainer],
 
-    deployment+:
-      deployment.spec.template.spec.withVolumesMixin([
-        volume.fromConfigMap(name, name),
-      ])
-      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
-      + deployment.spec.template.metadata.withAnnotationsMixin({
-        [name + '_cron_container_hash']: std.md5(std.toString(cronContainer)),
-      }),
-
-    statefulset+:
-      statefulset.spec.template.spec.withVolumesMixin([
-        volume.fromConfigMap(name, name),
-      ])
-      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes)
-      + statefulset.spec.template.metadata.withAnnotationsMixin({
-        [name + '_cron_container_hash']: std.md5(std.toString(cronContainer)),
-      }),
+    annotations+: {
+      [name + '_container_hash']: std.md5(std.toString(cronContainer)),
+    },
   },
 
   withRunAsNonRoot():: {
@@ -496,13 +487,9 @@
       + restic.withImage(image)
     ,
 
+    // We need to include the backup volumes so that the workload can mount
+    // them in at least some of the containers.
     volumes+: this.backup.volumes,
-
-    // mounts+: this.backup.mounts,
-
-    // volumes+: [
-    //   volume.fromSecret(refName, refName),
-    // ] + this.backup.volumes,
 
     resticBackup: this.backup,
   },
