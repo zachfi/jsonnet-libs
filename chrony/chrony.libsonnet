@@ -156,7 +156,7 @@
     server+:
       app.withContainer('gpsd', this.gpsdContainer)
       + app.withCharDevice(this.gpsDeviceVolumeName, device, false)
-      + app.withNodeSelector(nodeKey, nodeValue),
+      + app.withNodeSelector({ [nodeKey]: nodeValue }),
 
     client+:
       app.withAntiNodeSelector(nodeKey, nodeValue),

@@ -54,7 +54,7 @@
     defaultContainer(name, image)::
       container.new(name, image)
       + container.withImagePullPolicy('IfNotPresent')
-      + container.withVolumeMounts(this.mounts)
+      + container.withVolumeMountsMixin(this.mounts)
     ,
 
     extraContainers:: [],
@@ -129,7 +129,7 @@
       daemonset.spec.template.spec.withNodeSelector(hsh),
 
     cronJob+:
-      cronJob.spec.template.spec.withNodeSelector(hsh),
+      cronJob.spec.jobTemplate.spec.template.spec.withNodeSelector(hsh),
 
     backup+:
       restic.withNodeSelector(hsh),
@@ -225,7 +225,7 @@
       volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
     ],
 
-    local reloader = import 'reloader/main.libsonnet',
+    local reloader = import 'reloader/reloader.libsonnet',
     annotations+: reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations,
   },
 
@@ -235,12 +235,10 @@
     initContainer+:: container,
 
     deployment+:
-      deployment.spec.template.spec.withInitContainers([this.initContainer])
-      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes),
+      deployment.spec.template.spec.withInitContainers([this.initContainer]),
 
     statefulset+:
-      statefulset.spec.template.spec.withInitContainers([this.initContainer])
-      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
+      statefulset.spec.template.spec.withInitContainers([this.initContainer]),
   },
 
   // withInitRestoreSleep is used to add a sleep container to the init which
@@ -265,9 +263,6 @@
       + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
   },
 
-  // TODO: we should receive a container, in the case of restic, recieve the
-  // container and then mount the configmap scripts to loop and perform the
-  // backup.
   // The received container must include the /bin/bash binary.
   withCronSidecarContainer(c, hook='', interval=10000, path='/scripts'):: {
     local this = self,
@@ -667,10 +662,12 @@
   },
 
   withCron(schedule='0 * * * *'): {
+    local this = self,
+
     cronJob+:
       cronJob.spec.withSchedule(schedule),
 
-    cron: self.cronJob,
+    cron: this.cronJob,
   },
 
   withContainer(name, container): {
