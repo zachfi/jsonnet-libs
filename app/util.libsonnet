@@ -10,8 +10,12 @@
   local daemonset = k.apps.v1.daemonSet,
   local deployment = k.apps.v1.deployment,
   local envVar = k.core.v1.envVar,
+  local labelSelector = k.meta.v1.labelSelector,
+  local labelSelectorRequirement = k.meta.v1.labelSelectorRequirement,
   local nodeSelectorRequirement = k.core.v1.nodeSelectorRequirement,
   local nodeSelectorTerm = k.core.v1.nodeSelectorTerm,
+  local podAntiAffinity = k.core.v1.podAntiAffinity,
+  local podAffinityTerm = k.core.v1.podAffinityTerm,
   local pvc = k.core.v1.persistentVolumeClaim,
   local pv = k.core.v1.persistentVolume,
   local service = k.core.v1.service,
@@ -145,8 +149,29 @@
       + daemonset.spec.template.metadata.withLabels(hsh),
   },
 
-  withAntiNodeSelector(key, value): {
+  withAntiAffinity(): {
+    local this = self,
 
+    local lbls = { name: this.appName },
+
+    local requirements = [
+      labelSelectorRequirement.withKey('name')
+      + labelSelectorRequirement.withOperator('In')
+      + labelSelectorRequirement.withValues([this.appName]),
+    ],
+
+    local selector =
+      podAffinityTerm.labelSelector.withMatchExpressions(requirements)
+      + podAffinityTerm.withTopologyKey('kubernetes.io/hostname'),
+
+    deployment+:
+      deployment.spec.template.spec.affinity.podAntiAffinity.withRequiredDuringSchedulingIgnoredDuringExecution([selector]),
+
+    statefulset+:
+      statefulset.spec.template.spec.affinity.podAntiAffinity.withRequiredDuringSchedulingIgnoredDuringExecution([selector]),
+  },
+
+  withAntiNodeSelector(key, value): {
     local terms = nodeSelectorTerm.withMatchExpressions([
       nodeSelectorRequirement.withKey(key)
       + nodeSelectorRequirement.withOperator('NotIn')
