@@ -54,12 +54,12 @@
     defaultContainer(name, image)::
       container.new(name, image)
       + container.withImagePullPolicy('IfNotPresent')
-      + container.withVolumeMountsMixin(this.mounts)
+      + container.withVolumeMounts(this.mounts)
     ,
 
-    extraContainers:: [],
     container:: this.defaultContainer(appName, image),
-    initContainer:: this.defaultContainer('init', image),
+    extraContainers:: [],
+    initContainers:: [],
 
     svcPorts:: [],
     svc::
@@ -81,15 +81,18 @@
       + deployment.spec.template.spec.withTerminationGracePeriodSeconds(45)
       + deployment.spec.template.spec.withContainers([this.container] + this.extraContainers)
       + deployment.spec.template.spec.withVolumes(this.volumes)
+      + deployment.spec.template.spec.withInitContainers(this.initContainers)
     ,
 
     statefulset::
       statefulset.new(appName, 1, this.container,)
       + statefulset.spec.withServiceName(appName)
+      + statefulset.spec.withVolumeClaimTemplates(this.pvc)
       + statefulset.spec.template.metadata.withAnnotations(this.annotations)
       + statefulset.spec.updateStrategy.rollingUpdate.withMaxUnavailable(1)
       + statefulset.spec.template.spec.withContainers([this.container] + this.extraContainers)
       + statefulset.spec.template.spec.withVolumes(this.volumes)
+      + statefulset.spec.template.spec.withInitContainers(this.initContainers)
     ,
 
     daemonset::
@@ -97,6 +100,7 @@
       + daemonset.spec.template.metadata.withAnnotations(this.annotations)
       + daemonset.spec.template.spec.withContainers([this.container] + this.extraContainers)
       + daemonset.spec.template.spec.withVolumes(this.volumes)
+      + daemonset.spec.template.spec.withInitContainers(this.initContainers)
     ,
 
     cronJob::
