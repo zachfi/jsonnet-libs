@@ -108,11 +108,8 @@
       cronJob.new(appName, '*/3 * * * *', [this.container])
       + cronJob.spec.jobTemplate.spec.withTtlSecondsAfterFinished(300)  // 1 week
       + cronJob.spec.jobTemplate.spec.withBackoffLimit(1)
-      + cronJob.spec.jobTemplate.spec.template.spec.withRestartPolicy('Never'),
-
-    backup::
-      local this = self;
-      restic.new(this.appName, this.app.namespace),
+      + cronJob.spec.jobTemplate.spec.template.spec.withRestartPolicy('Never')
+      + cronJob.spec.jobTemplate.spec.template.spec.withVolumes(this.volumes),
 
     // Workload is used to define the overall replicaset.  This allows
     // functions to modify the behavior of both the statefulset and deployment
@@ -231,40 +228,30 @@
 
     local reloader = import 'reloader/reloader.libsonnet',
     annotations+: reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations,
+
+    backup+:: restic.withVolumeMount(this.tlsVolumeName, mountPath),
   },
 
-  withInitContainer(container): {
+  withInitContainer(c): {
     local this = self,
 
-    initContainer+:: container,
-
-    deployment+:
-      deployment.spec.template.spec.withInitContainers([this.initContainer]),
-
-    statefulset+:
-      statefulset.spec.template.spec.withInitContainers([this.initContainer]),
+    initContainers+: [
+      c
+      + container.withVolumeMountsMixin(this.mounts),
+    ],
   },
 
   // withInitRestoreSleep is used to add a sleep container to the init which
   // can be used to manually with restic.
-  withInitRestoreSleep(): {
+  withInitRestoreSleep(sleepSeconds=100): {
     local this = self,
 
-    sleepContainerSeconds:: '100',
-
-    sleepContainer+::
-      this.backup.restoreContainer
+    initContainers+: [
+      this.backup.resticContainer
       + container.withCommand('sleep')
-      + container.withArgs([this.sleepContainerSeconds]),
-
-    deployment+:
-      deployment.spec.template.spec.withInitContainers(this.sleepContainer)
-      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
-    ,
-
-    statefulset+:
-      statefulset.spec.template.spec.withInitContainers(this.sleepContainer)
-      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
+      + container.withArgs([sleepSeconds])
+      + container.withVolumeMountsMixin(this.mounts),
+    ],
   },
 
   // The received container must include the /bin/bash binary.
@@ -297,7 +284,7 @@
 
     extraContainers+: [
       c
-      + container.withVolumeMountsMixin(this.mounts + [containerMount])
+      + container.withVolumeMountsMixin([containerMount])
       + container.withCommand(['/bin/bash'])
       + container.withArgs([
         '%(scripts)s/cron.sh' % { scripts: path },
@@ -316,7 +303,6 @@
     local this = self,
     local volumeName = '%s-cron' % name,
 
-    // TODO: this appears to be unused
     sidecarCronConfigMaps+: [
       configMap.new(volumeName)
       + configMap.withData({
@@ -331,15 +317,15 @@
       }),
     ],
 
+    local containerMount = volumeMount.new(volumeName, path),
+
     local cronContainer =
       this.defaultContainer(name, image)
       + container.withCommand(['/bin/bash'])
       + container.withArgs([
         '%s/cron.sh' % path,
       ])
-      + container.withVolumeMountsMixin([
-        volumeMount.new(volumeName, path),
-      ])
+      + container.withVolumeMountsMixin([containerMount])
     ,
 
     // The volume needs to be included on the workload we can mount it in this container.
@@ -371,13 +357,10 @@
   withInitRestore(): {
     local this = self,
     deployment+:
-      deployment.spec.template.spec.withInitContainers(this.backup.restoreContainer)
-      + deployment.spec.template.spec.withVolumesMixin(this.backup.volumes)
-    ,
+      deployment.spec.template.spec.withInitContainers(this.backup.resticContainer),
 
     statefulset+:
-      statefulset.spec.template.spec.withInitContainers(this.backup.restoreContainer)
-      + statefulset.spec.template.spec.withVolumesMixin(this.backup.volumes),
+      statefulset.spec.template.spec.withInitContainers(this.backup.resticContainer),
   },
 
   withInitChown(path, uid, gid):: {
@@ -392,12 +375,12 @@
   },
 
   withFsPermissions(uid, gid): {
-    backup+:
+    backup+::
       restic.withFsPermissions(uid, gid),
 
     // This worked for the init container to restore the data, but when
     // starting the another container, root was now not root, so was unable to
-    // mkdir in /var/run (owned by root).  Not sure the righ workaround.
+    // mkdir in /var/run (owned by root).  Not sure the right workaround.
 
     // 2024-01-29T02:04:26+0000
     // Had to comment this again for media.
@@ -480,22 +463,19 @@
   // stored in the secret. If secretRefData is not provided, the secret will
   // not be created, and the app is responsible for creating the secret.  The
   // referenced secret or the secretRefData must contain the `accessKey` and
-  // `secretKey` keys.
+  // `secretKey` keys.unifi
   withResticS3Backup(bucketURL, secretRefName='restic-config', secretRefData={}, image='zalegrala/restic:latest'): {
     local this = self,
 
     local refName = '%s-%s' % [this.appName, secretRefName],
 
-    backup+:
-      restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
-      + restic.withImage(image)
-    ,
+    backup:
+      restic.new(this.appName, this.app.namespace)
+      + restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
+      + restic.withImage(image),
 
-    // We need to include the backup volumes so that the workload can mount
-    // them in at least some of the containers.
+    // Include the backup volumes so that containers can mount them.
     volumes+: this.backup.volumes,
-
-    resticBackup: this.backup,
   },
 
   withMatchLabels(matchers={}): {
@@ -507,7 +487,7 @@
       statefulset.spec.template.metadata.withLabelsMixin(matchers)
       + statefulset.spec.selector.withMatchLabels(matchers),
 
-    backup+:
+    backup+::
       restic.withMatchLabels(matchers),
   },
 
@@ -541,25 +521,11 @@
     volumes+: [
       volume.fromConfigMap(configVolumeName, configVolumeName),
     ],
-
-    // TODO: move cron volumeMount to the mounts and volumes pattern above.
-    cronJob+::
-      cronJob.spec.jobTemplate.spec.template.spec.withVolumes(
-        volume.fromConfigMap(configVolumeName, configVolumeName),
-      )
-      + {
-        spec+: { jobTemplate+: { spec+: { template+: { spec+: { containers: [
-          i
-          + container.withVolumeMountsMixin([
-            volumeMount.withName(configVolumeName)
-            + volumeMount.withMountPath(mountPath),
-          ])
-
-          for i in super.containers
-        ] } } } } },
-      },
   },
 
+  // NOTE: For backups, this must be called after the withResticS3Backup()
+  // function, since we need to extend the backup here to include this PVC in
+  // the backup.
   withLocalDataMount(mountPath='/data', storageClass='local-path', size='10Gi'): {
     local this = self,
 
@@ -571,18 +537,19 @@
       volume.fromPersistentVolumeClaim(this.dataVolumeName, this.dataVolumeName),
     ],
 
-    dataPvc:
+    local dataPvc =
       pvc.new(this.dataVolumeName)
       + pvc.spec.resources.withRequests({ storage: size })
       + pvc.spec.withAccessModes(['ReadWriteOnce'])
       + pvc.spec.withStorageClassName(storageClass)
       + pvc.metadata.withLabels({ app: this.appName }),
 
-    statefulset+:
-      statefulset.spec.withVolumeClaimTemplatesMixin(this.dataPvc),
+    // pvc+: [dataPvc],
 
-    backup+:
-      //   // restic.withPVC(this.dataVolumeName + '-ldap-1', mountPath),
+    statefulset+:
+      statefulset.spec.withVolumeClaimTemplatesMixin(dataPvc),
+
+    backup+::
       restic.withPVC(this.dataVolumeName, mountPath),
   },
 
@@ -728,10 +695,10 @@
 
     pvc+: [
       pvc.new(volumeName)
-      + pvc.mixin.spec.resources.withRequests({ storage: '1Mi' })
-      + pvc.mixin.spec.withAccessModes(['ReadWriteMany'])
+      + pvc.spec.resources.withRequests({ storage: '1Mi' })
+      + pvc.spec.withAccessModes(['ReadWriteMany'])
       // + pvc.mixin.metadata.withLabels({ app: self.app.name })
-      + pvc.mixin.spec.withStorageClassName(''),
+      + pvc.spec.withStorageClassName(''),
     ],
 
     mounts+: [

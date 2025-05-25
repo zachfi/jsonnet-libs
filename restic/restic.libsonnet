@@ -35,6 +35,7 @@
     ],
 
     containerEnv:: [],
+    containerArgs:: ['/restic/sleep.sh'],
 
     configData:: {
       'init.sh': |||
@@ -62,11 +63,9 @@
       ||| % this,
     },
 
-    scripts:
+    scriptsConfigMap:
       configMap.new(this.scriptsVolumeName)
       + configMap.withData(this.configData),
-
-    containerArgs:: ['/restic/sleep.sh'],
 
     resticContainer::
       container.new('restic', this.image)
@@ -102,25 +101,22 @@
     image: image,
   },
 
-  withPVC(volumeName, mountPath, readOnly=true): {
+  withPVC(volumeName, mountPath): {
     configData+: {
       'backup.sh'+: |||
         $RESTIC backup %s
       ||| % mountPath,
     },
 
-    volumes+: [
-      volume.fromPersistentVolumeClaim(volumeName, volumeName),
-    ],
-
+    // The volume is expected to be mounted by the workload, so we don't need
+    // to add it here.
     mounts+: [
-      volumeMount.new(volumeName, mountPath)
-      + volumeMount.withReadOnly(readOnly),
+      volumeMount.new(volumeName, mountPath),
     ],
   },
 
   // withCertificate creates a TLS certificate for restic, used to validate
-  // endpoints in the case of a private CA.
+  // endpoints in the case of a private CA, or for use as a client.
   withCertificate(volumeName, issuer, cn, mountPath='/tls'): {
     local this = self,
 
@@ -130,6 +126,12 @@
       volume.fromSecret(volumeName, volumeName),
     ],
 
+    mounts+: [
+      volumeMount.new(volumeName, mountPath),
+    ],
+  },
+
+  withVolumeMount(volumeName, mountPath): {
     mounts+: [
       volumeMount.new(volumeName, mountPath),
     ],
