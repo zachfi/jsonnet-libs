@@ -51,6 +51,8 @@
     volumes:: [],
     mounts:: [],
 
+    backup:: restic.new(appName, namespace),
+
     defaultContainer(name, image)::
       container.new(name, image)
       + container.withImagePullPolicy('IfNotPresent')
@@ -88,8 +90,9 @@
       statefulset.new(appName, 1, this.container,)
       + statefulset.spec.withServiceName(appName)
       + statefulset.spec.withVolumeClaimTemplates(this.pvc)
-      + statefulset.spec.template.metadata.withAnnotations(this.annotations)
+      + statefulset.spec.persistentVolumeClaimRetentionPolicy.withWhenDeleted('Retain')
       + statefulset.spec.updateStrategy.rollingUpdate.withMaxUnavailable(1)
+      + statefulset.spec.template.metadata.withAnnotations(this.annotations)
       + statefulset.spec.template.spec.withContainers([this.container] + this.extraContainers)
       + statefulset.spec.template.spec.withVolumes(this.volumes)
       + statefulset.spec.template.spec.withInitContainers(this.initContainers)
@@ -229,7 +232,8 @@
     local reloader = import 'reloader/reloader.libsonnet',
     annotations+: reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations,
 
-    backup+:: restic.withVolumeMount(this.tlsVolumeName, mountPath),
+    backup+:
+      restic.withVolumeMount(this.tlsVolumeName, mountPath),
   },
 
   withInitContainer(c): {
@@ -375,7 +379,7 @@
   },
 
   withFsPermissions(uid, gid): {
-    backup+::
+    backup+:
       restic.withFsPermissions(uid, gid),
 
     // This worked for the init container to restore the data, but when
@@ -469,13 +473,17 @@
 
     local refName = '%s-%s' % [this.appName, secretRefName],
 
-    backup:
-      restic.new(this.appName, this.app.namespace)
-      + restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
+    backup+:
+      restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
       + restic.withImage(image),
 
     // Include the backup volumes so that containers can mount them.
     volumes+: this.backup.volumes,
+  },
+
+  withRestic(): {
+    local this = self,
+    resticBackup: this.backup,
   },
 
   withMatchLabels(matchers={}): {
@@ -487,7 +495,7 @@
       statefulset.spec.template.metadata.withLabelsMixin(matchers)
       + statefulset.spec.selector.withMatchLabels(matchers),
 
-    backup+::
+    backup+:
       restic.withMatchLabels(matchers),
   },
 
@@ -511,6 +519,10 @@
     ['configmap_config_%s_%s' % [subPath, nameOverride]]:
       configMap.new(configVolumeName)
       + configMap.withData(data),
+
+    annotations+: {
+      [configHashName]: std.md5(std.toString(data)),
+    },
 
     mounts+: [
       volumeMount.withName(configVolumeName)
@@ -549,7 +561,7 @@
     statefulset+:
       statefulset.spec.withVolumeClaimTemplatesMixin(dataPvc),
 
-    backup+::
+    backup+:
       restic.withPVC(this.dataVolumeName, mountPath),
   },
 
