@@ -556,10 +556,10 @@
       + pvc.spec.withStorageClassName(storageClass)
       + pvc.metadata.withLabels({ app: this.appName }),
 
-    // pvc+: [dataPvc],
+    pvc+: [dataPvc],
 
-    statefulset+:
-      statefulset.spec.withVolumeClaimTemplatesMixin(dataPvc),
+    // statefulset+:
+    //   statefulset.spec.withVolumeClaimTemplatesMixin(dataPvc),
 
     backup+:
       restic.withPVC(this.dataVolumeName, mountPath),
@@ -700,11 +700,6 @@
       + pv.spec.nfs.withReadOnly(false),
     ],
 
-    // TODO: consider NFS 4.1
-    // mountOptions:
-    //     - hard
-    //     - nfsvers=4.1
-
     pvc+: [
       pvc.new(volumeName)
       + pvc.spec.resources.withRequests({ storage: '1Mi' })
@@ -722,6 +717,18 @@
       volume.withName(volumeName)
       + volume.nfs.withPath(nfsPath)
       + volume.nfs.withServer(nfsServer),
+    ],
+  },
+
+  withPVCMount(volumeName, mountPath, readOnly=false): {
+    local this = self,
+
+    mounts+: [
+      volumeMount.new(volumeName, mountPath, readOnly),
+    ],
+
+    volumes+: [
+      volume.fromPersistentVolumeClaim(volumeName, volumeName),
     ],
   },
 
