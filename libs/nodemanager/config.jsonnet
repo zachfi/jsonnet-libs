@@ -22,3 +22,6 @@ config.new(
     for version in versions
   ]
 )
+{
+  repository: self.name,
+}

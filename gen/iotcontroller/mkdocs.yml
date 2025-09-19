@@ -12,10 +12,10 @@
       "separator": "[\\s\\-\\.]+"
   - "minify":
       "minify_html": true
-"repo_name": "jsonnet-libs/nodemanager-libsonnet"
-"repo_url": "https://github.com/jsonnet-libs/nodemanager-libsonnet"
-"site_name": "nodemanager jsonnet library"
-"site_url": "https://jsonnet-libs.github.io/nodemanager-libsonnet"
+"repo_name": "https://iotcontroller"
+"repo_url": "https://iotcontroller"
+"site_name": "iotcontroller jsonnet library"
+"site_url": "https://jsonnet-libs.github.io/iotcontroller-libsonnet"
 "theme":
   "features":
     - "navigation.tabs"
