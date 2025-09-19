@@ -37,5 +37,9 @@ libs/*:
 		-e SSH_KEY="$${SSH_KEY}" \
 		$(IMAGE_PREFIX)/$(IMAGE_NAME):$(IMAGE_TAG) /config /output
 
+clean:
+	@rm -f libs/*/config.yml
+	@rm -rf libs/*/skel/
+
 .PHONY: all libs/*
 
