@@ -16,7 +16,7 @@ local crds = [
 ];
 
 config.new(
-  name='iotcontroller',
+  name='iotcontroller-libsonnet',
   specs=[
     {
       output: version,

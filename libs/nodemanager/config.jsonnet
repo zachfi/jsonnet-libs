@@ -8,7 +8,7 @@ local versions = [
 local path = 'https://raw.githubusercontent.com/zachfi/nodemanager/v%s/config/crd/bases/';
 
 config.new(
-  name='nodemanager',
+  name='nodemanager-libsonnet',
   specs=[
     {
       output: version,
