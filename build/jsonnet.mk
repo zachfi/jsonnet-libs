@@ -20,7 +20,7 @@ GIT_COMMITTER_EMAIL ?= $(shell git --no-pager log --format=format:'%ae' -n 1)
 default:
 
 .PHONY: all
-all: libs/*
+all: libs/* clean
 
 libs/*:
 	mkdir -p $(ABS_OUTPUT_DIR) && \
