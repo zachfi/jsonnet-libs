@@ -1,11 +1,11 @@
 local config = import 'jsonnet/config.jsonnet';
 
 local versions = [
-  'main',
+  '0.1.0',
 ];
 
 // The files in new versions were moved here:
-local path = 'https://raw.githubusercontent.com/zachfi/iotcontroller/%s/config/crd/bases/';
+local path = 'https://raw.githubusercontent.com/zachfi/iotcontroller/v%s/config/crd/bases/';
 
 local crds = [
   'iot.iot_conditions.yaml',

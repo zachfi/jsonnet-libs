@@ -7,6 +7,11 @@ local versions = [
 // The files in new versions were moved here:
 local path = 'https://raw.githubusercontent.com/zachfi/nodemanager/v%s/config/crd/bases/';
 
+local crds = [
+  'common.nodemanager_configsets.yaml',
+  'common.nodemanager_managednodes.yaml',
+];
+
 config.new(
   name='nodemanager-libsonnet',
   specs=[
@@ -14,8 +19,8 @@ config.new(
       output: version,
       prefix: '',
       crds: [
-        (path % version) + 'common.nodemanager_configsets.yaml',
-        (path % version) + 'common.nodemanager_managednodes.yaml',
+        (path % version) + crd
+        for crd in crds
       ],
       localName: 'nodemanager',
     }

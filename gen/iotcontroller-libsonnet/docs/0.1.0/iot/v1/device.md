@@ -1,10 +1,10 @@
 ---
-permalink: /main/iot/v1/zone/
+permalink: /0.1.0/iot/v1/device/
 ---
 
-# iot.v1.zone
+# iot.v1.device
 
-"Zone is the Schema for the zones API"
+"Device is the Schema for the devices API"
 
 ## Index
 
@@ -30,10 +30,15 @@ permalink: /main/iot/v1/zone/
   * [`fn withSelfLink(selfLink)`](#fn-metadatawithselflink)
   * [`fn withUid(uid)`](#fn-metadatawithuid)
 * [`obj spec`](#obj-spec)
-  * [`fn withColors(colors)`](#fn-specwithcolors)
-  * [`fn withColorsMixin(colors)`](#fn-specwithcolorsmixin)
-  * [`fn withDevices(devices)`](#fn-specwithdevices)
-  * [`fn withDevicesMixin(devices)`](#fn-specwithdevicesmixin)
+  * [`fn withDate_code(date_code)`](#fn-specwithdate_code)
+  * [`fn withDescription(description)`](#fn-specwithdescription)
+  * [`fn withManufacture_name(manufacture_name)`](#fn-specwithmanufacture_name)
+  * [`fn withModel(model)`](#fn-specwithmodel)
+  * [`fn withModel_id(model_id)`](#fn-specwithmodel_id)
+  * [`fn withNote(note)`](#fn-specwithnote)
+  * [`fn withPower_source(power_source)`](#fn-specwithpower_source)
+  * [`fn withType(type)`](#fn-specwithtype)
+  * [`fn withVendor(vendor)`](#fn-specwithvendor)
 
 ## Fields
 
@@ -43,7 +48,7 @@ permalink: /main/iot/v1/zone/
 new(name)
 ```
 
-new returns an instance of Zone
+new returns an instance of Device
 
 ## obj metadata
 
@@ -211,40 +216,75 @@ withUid(uid)
 
 ## obj spec
 
-"ZoneSpec defines the desired state of Zone"
+"DeviceSpec defines the desired state of Device in the Kubernetes API."
 
-### fn spec.withColors
+### fn spec.withDate_code
 
 ```ts
-withColors(colors)
+withDate_code(date_code)
 ```
 
 
 
-### fn spec.withColorsMixin
+### fn spec.withDescription
 
 ```ts
-withColorsMixin(colors)
+withDescription(description)
 ```
 
 
 
-**Note:** This function appends passed data to existing values
-
-### fn spec.withDevices
+### fn spec.withManufacture_name
 
 ```ts
-withDevices(devices)
+withManufacture_name(manufacture_name)
 ```
 
 
 
-### fn spec.withDevicesMixin
+### fn spec.withModel
 
 ```ts
-withDevicesMixin(devices)
+withModel(model)
 ```
 
 
 
-**Note:** This function appends passed data to existing values
+### fn spec.withModel_id
+
+```ts
+withModel_id(model_id)
+```
+
+
+
+### fn spec.withNote
+
+```ts
+withNote(note)
+```
+
+
+
+### fn spec.withPower_source
+
+```ts
+withPower_source(power_source)
+```
+
+
+
+### fn spec.withType
+
+```ts
+withType(type)
+```
+
+
+
+### fn spec.withVendor
+
+```ts
+withVendor(vendor)
+```
+

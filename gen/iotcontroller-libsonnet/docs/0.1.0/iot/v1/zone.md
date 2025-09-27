@@ -1,10 +1,10 @@
 ---
-permalink: /main/iot/v1/condition/
+permalink: /0.1.0/iot/v1/zone/
 ---
 
-# iot.v1.condition
+# iot.v1.zone
 
-"Condition is the Schema for the conditions API"
+"Zone is the Schema for the zones API"
 
 ## Index
 
@@ -30,25 +30,10 @@ permalink: /main/iot/v1/condition/
   * [`fn withSelfLink(selfLink)`](#fn-metadatawithselflink)
   * [`fn withUid(uid)`](#fn-metadatawithuid)
 * [`obj spec`](#obj-spec)
-  * [`fn withEnabled(enabled)`](#fn-specwithenabled)
-  * [`fn withMatches(matches)`](#fn-specwithmatches)
-  * [`fn withMatchesMixin(matches)`](#fn-specwithmatchesmixin)
-  * [`fn withName(name)`](#fn-specwithname)
-  * [`fn withRemediations(remediations)`](#fn-specwithremediations)
-  * [`fn withRemediationsMixin(remediations)`](#fn-specwithremediationsmixin)
-  * [`fn withSchedule(schedule)`](#fn-specwithschedule)
-  * [`obj spec.matches`](#obj-specmatches)
-    * [`fn withLabels(labels)`](#fn-specmatcheswithlabels)
-    * [`fn withLabelsMixin(labels)`](#fn-specmatcheswithlabelsmixin)
-  * [`obj spec.remediations`](#obj-specremediations)
-    * [`fn withActive_scene(active_scene)`](#fn-specremediationswithactive_scene)
-    * [`fn withActive_state(active_state)`](#fn-specremediationswithactive_state)
-    * [`fn withInactive_scene(inactive_scene)`](#fn-specremediationswithinactive_scene)
-    * [`fn withInactive_state(inactive_state)`](#fn-specremediationswithinactive_state)
-    * [`fn withZone(zone)`](#fn-specremediationswithzone)
-    * [`obj spec.remediations.when_gate`](#obj-specremediationswhen_gate)
-      * [`fn withStart(start)`](#fn-specremediationswhen_gatewithstart)
-      * [`fn withStop(stop)`](#fn-specremediationswhen_gatewithstop)
+  * [`fn withColors(colors)`](#fn-specwithcolors)
+  * [`fn withColorsMixin(colors)`](#fn-specwithcolorsmixin)
+  * [`fn withDevices(devices)`](#fn-specwithdevices)
+  * [`fn withDevicesMixin(devices)`](#fn-specwithdevicesmixin)
 
 ## Fields
 
@@ -58,7 +43,7 @@ permalink: /main/iot/v1/condition/
 new(name)
 ```
 
-new returns an instance of Condition
+new returns an instance of Zone
 
 ## obj metadata
 
@@ -226,149 +211,40 @@ withUid(uid)
 
 ## obj spec
 
-"ConditionSpec defines the desired state of Condition"
+"ZoneSpec defines the desired state of Zone"
 
-### fn spec.withEnabled
+### fn spec.withColors
 
 ```ts
-withEnabled(enabled)
+withColors(colors)
 ```
 
 
 
-### fn spec.withMatches
+### fn spec.withColorsMixin
 
 ```ts
-withMatches(matches)
-```
-
-
-
-### fn spec.withMatchesMixin
-
-```ts
-withMatchesMixin(matches)
+withColorsMixin(colors)
 ```
 
 
 
 **Note:** This function appends passed data to existing values
 
-### fn spec.withName
+### fn spec.withDevices
 
 ```ts
-withName(name)
+withDevices(devices)
 ```
 
 
 
-### fn spec.withRemediations
+### fn spec.withDevicesMixin
 
 ```ts
-withRemediations(remediations)
-```
-
-
-
-### fn spec.withRemediationsMixin
-
-```ts
-withRemediationsMixin(remediations)
+withDevicesMixin(devices)
 ```
 
 
 
 **Note:** This function appends passed data to existing values
-
-### fn spec.withSchedule
-
-```ts
-withSchedule(schedule)
-```
-
-"A cron string: * * * * *"
-
-## obj spec.matches
-
-
-
-### fn spec.matches.withLabels
-
-```ts
-withLabels(labels)
-```
-
-
-
-### fn spec.matches.withLabelsMixin
-
-```ts
-withLabelsMixin(labels)
-```
-
-
-
-**Note:** This function appends passed data to existing values
-
-## obj spec.remediations
-
-
-
-### fn spec.remediations.withActive_scene
-
-```ts
-withActive_scene(active_scene)
-```
-
-
-
-### fn spec.remediations.withActive_state
-
-```ts
-withActive_state(active_state)
-```
-
-
-
-### fn spec.remediations.withInactive_scene
-
-```ts
-withInactive_scene(inactive_scene)
-```
-
-
-
-### fn spec.remediations.withInactive_state
-
-```ts
-withInactive_state(inactive_state)
-```
-
-
-
-### fn spec.remediations.withZone
-
-```ts
-withZone(zone)
-```
-
-
-
-## obj spec.remediations.when_gate
-
-"WhenGate is used to create a window for the epoch around which this Remediation is applicable."
-
-### fn spec.remediations.when_gate.withStart
-
-```ts
-withStart(start)
-```
-
-
-
-### fn spec.remediations.when_gate.withStop
-
-```ts
-withStop(stop)
-```
-

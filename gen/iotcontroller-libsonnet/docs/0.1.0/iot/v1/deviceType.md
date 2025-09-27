@@ -1,10 +1,10 @@
 ---
-permalink: /main/iot/v1/device/
+permalink: /0.1.0/iot/v1/deviceType/
 ---
 
-# iot.v1.device
+# iot.v1.deviceType
 
-"Device is the Schema for the devices API"
+"DeviceType is the Schema for the devicetypes API"
 
 ## Index
 
@@ -30,15 +30,9 @@ permalink: /main/iot/v1/device/
   * [`fn withSelfLink(selfLink)`](#fn-metadatawithselflink)
   * [`fn withUid(uid)`](#fn-metadatawithuid)
 * [`obj spec`](#obj-spec)
-  * [`fn withDate_code(date_code)`](#fn-specwithdate_code)
   * [`fn withDescription(description)`](#fn-specwithdescription)
-  * [`fn withManufacture_name(manufacture_name)`](#fn-specwithmanufacture_name)
-  * [`fn withModel(model)`](#fn-specwithmodel)
-  * [`fn withModel_id(model_id)`](#fn-specwithmodel_id)
-  * [`fn withNote(note)`](#fn-specwithnote)
-  * [`fn withPower_source(power_source)`](#fn-specwithpower_source)
-  * [`fn withType(type)`](#fn-specwithtype)
-  * [`fn withVendor(vendor)`](#fn-specwithvendor)
+  * [`fn withDevice_type(device_type)`](#fn-specwithdevice_type)
+  * [`fn withFriendly_name(friendly_name)`](#fn-specwithfriendly_name)
 
 ## Fields
 
@@ -48,7 +42,7 @@ permalink: /main/iot/v1/device/
 new(name)
 ```
 
-new returns an instance of Device
+new returns an instance of DeviceType
 
 ## obj metadata
 
@@ -216,15 +210,7 @@ withUid(uid)
 
 ## obj spec
 
-"DeviceSpec defines the desired state of Device in the Kubernetes API."
-
-### fn spec.withDate_code
-
-```ts
-withDate_code(date_code)
-```
-
-
+"DeviceTypeSpec defines the desired state of DeviceType"
 
 ### fn spec.withDescription
 
@@ -234,57 +220,17 @@ withDescription(description)
 
 
 
-### fn spec.withManufacture_name
+### fn spec.withDevice_type
 
 ```ts
-withManufacture_name(manufacture_name)
+withDevice_type(device_type)
 ```
 
 
 
-### fn spec.withModel
+### fn spec.withFriendly_name
 
 ```ts
-withModel(model)
-```
-
-
-
-### fn spec.withModel_id
-
-```ts
-withModel_id(model_id)
-```
-
-
-
-### fn spec.withNote
-
-```ts
-withNote(note)
-```
-
-
-
-### fn spec.withPower_source
-
-```ts
-withPower_source(power_source)
-```
-
-
-
-### fn spec.withType
-
-```ts
-withType(type)
-```
-
-
-
-### fn spec.withVendor
-
-```ts
-withVendor(vendor)
+withFriendly_name(friendly_name)
 ```
 

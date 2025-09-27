@@ -1,5 +1,5 @@
 ---
-permalink: /main/iot/
+permalink: /0.1.0/iot/
 ---
 
 # iot
