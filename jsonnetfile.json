@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "dependencies": [
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/jsonnet-libs/vertical-pod-autoscaler-libsonnet.git",
+          "subdir": "1.0.0"
+        }
+      },
+      "version": "main"
+    }
+  ],
+  "legacyImports": false
+}
