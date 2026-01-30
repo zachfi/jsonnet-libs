@@ -1,4 +1,14 @@
 // A useful utility for deploying apps on Kubernetes with Jsonnet.
+//
+// Usage / ordering:
+//   1. app.new(appName, image, namespace)
+//   2. Choose workload: withDeployment(), withStatefulSet(), or withDaemonSet()
+//   3. withService() if you need a Service
+//   4. withPDB(), withVPA() — call after (2) so workload is set
+//   5. Other mixins (ports, volumes, certificate, topology spread, etc.) in any order
+//   Include in manifest output as needed: workload, service, and any of pdb, vpa,
+//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc, cron, resticBackup.
+//
 {
   local k = import 'k.libsonnet',
   local kausal = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
@@ -140,6 +150,42 @@
 
     backup+:
       restic.withNodeSelector(hsh),
+  },
+
+  withTerminationGracePeriodSeconds(seconds): {
+    deployment+:
+      deployment.spec.template.spec.withTerminationGracePeriodSeconds(seconds),
+
+    statefulset+:
+      statefulset.spec.template.spec.withTerminationGracePeriodSeconds(seconds),
+
+    daemonset+:
+      daemonset.spec.template.spec.withTerminationGracePeriodSeconds(seconds),
+
+    cronJob+:
+      cronJob.spec.jobTemplate.spec.template.spec.withTerminationGracePeriodSeconds(seconds),
+  },
+
+  // withTopologySpreadConstraints sets pod topology spread (e.g. zone spreading).
+  // Build constraints with your k8s lib (e.g. k.core.v1.topologySpreadConstraint).
+  // Example (exact API may vary by k lib version; use appName from new() for selector):
+  //   local tsc = k.core.v1.topologySpreadConstraint;
+  //   + app.withTopologySpreadConstraints([
+  //       tsc.new()
+  //       + tsc.withMaxSkew(1)
+  //       + tsc.withTopologyKey('topology.kubernetes.io/zone')
+  //       + tsc.withWhenUnsatisfiable('DoNotSchedule')
+  //       + tsc.labelSelector.withMatchLabels({ name: appName }),
+  //     ])
+  withTopologySpreadConstraints(constraints): {
+    deployment+:
+      deployment.spec.template.spec.withTopologySpreadConstraints(constraints),
+
+    statefulset+:
+      statefulset.spec.template.spec.withTopologySpreadConstraints(constraints),
+
+    daemonset+:
+      daemonset.spec.template.spec.withTopologySpreadConstraints(constraints),
   },
 
   withSelector(hsh={}): {
@@ -561,6 +607,11 @@
     resticBackup: this.backup,
   },
 
+  // withMatchLabels adds the given labels to both the workload selector
+  // (spec.selector.matchLabels) and the pod template (spec.template.metadata.labels),
+  // so selector and template stay in sync. Use for labels that identify which pods
+  // belong to this workload. For labels only on the pod template (e.g. display or
+  // app.kubernetes.io/component), add them via the workload’s template elsewhere.
   withMatchLabels(matchers={}): {
     deployment+:
       deployment.spec.template.metadata.withLabelsMixin(matchers)
