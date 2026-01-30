@@ -197,20 +197,13 @@
 
   withServiceAccountName(name): {
     deployment+:
-      deployment.spec.template.spec.withServiceAccountName(
-        name
-      ),
+      deployment.spec.template.spec.withServiceAccountName(name),
 
-    // TODO:
-    // statefulset+:
-    //   statefulset.spec.template.spec.withServiceAccountName(
-    //     name
-    //   ),
+    statefulset+:
+      statefulset.spec.template.spec.withServiceAccountName(name),
 
     daemonset+:
-      daemonset.spec.template.spec.withServiceAccountName(
-        name
-      ),
+      daemonset.spec.template.spec.withServiceAccountName(name),
   },
 
   withCertificate(issuer='vault-issuer', tld='cluster.local', altNames=[], mountPath='/tls'): {
@@ -232,8 +225,12 @@
       volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
     ],
 
-    local reloader = import 'reloader/reloader.libsonnet',
-    annotations+: reloader.reloadOnSecretsAnnotation(this.tlsVolumeName,).metadata.annotations,
+    // Stakater Reloader: when this secret changes, Reloader restarts the
+    // workload. Requires the Reloader controller to be installed (e.g. via
+    // Helm chart). Annotation format: secret.reloader.stakater.com/reload
+    annotations+: {
+      'secret.reloader.stakater.com/reload': this.tlsVolumeName,
+    },
 
     backup+:
       restic.withVolumeMount(this.tlsVolumeName, mountPath),
@@ -371,14 +368,18 @@
   },
 
   withInitChown(path, uid, gid):: {
-    initContainer+:
-      container.withImage('alpine:latest')
+    local this = self,
+
+    initContainers+: [
+      container.new('init-chown', 'alpine:latest')
       + container.securityContext.withRunAsUser(0)
       + container.withCommand([
         'sh',
         '-c',
         '(chmod 0775 %(p)s; chgrp %(g)s %(p)s)' % { p: path, g: gid },
-      ]),
+      ])
+      + container.withVolumeMountsMixin(this.mounts),
+    ],
   },
 
   withFsPermissions(uid, gid): {
@@ -539,7 +540,7 @@
   // stored in the secret. If secretRefData is not provided, the secret will
   // not be created, and the app is responsible for creating the secret.  The
   // referenced secret or the secretRefData must contain the `accessKey` and
-  // `secretKey` keys.unifi
+  // `secretKey` keys.
   withResticS3Backup(bucketURL, secretRefName='restic-config', secretRefData={}, image='zalegrala/restic:latest'): {
     local this = self,
 
@@ -640,8 +641,8 @@
   withCharDevice(volumeName, mountPath, mount=true): {
     local this = self,
 
-    // Disabling mount is useful when withContainers() includes additional
-    // contianers and not all contianers need the char device.
+    // Disabling mount is useful when withContainer() includes additional
+    // containers and not all containers need the char device.
     mounts+: (
       if mount then
         [volumeMount.new(volumeName, mountPath)]
@@ -757,6 +758,15 @@
   withPorts(ports=[]): {
     container+:
       container.withPorts(ports),
+  },
+
+  // withResources sets requests and/or limits on the main container. Pass
+  // objects with keys such as cpu and memory (e.g. requests={ cpu: '100m',
+  // memory: '128Mi' }). Only non-empty objects are applied.
+  withResources(requests={}, limits={}): {
+    container+:
+      (if std.length(requests) > 0 then container.resources.withRequests(requests) else {})
+      + (if std.length(limits) > 0 then container.resources.withLimits(limits) else {}),
   },
 
   withNfs(nfsServer, nfsPath, mountVolume, mountPath): {
