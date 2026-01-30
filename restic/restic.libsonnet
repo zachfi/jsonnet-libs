@@ -7,24 +7,22 @@
   local cronJob = k.batch.v1.cronJob,
   local envVar = k.core.v1.envVar,
   local job = k.batch.v1.job,
+  local podAffinityTerm = k.core.v1.podAffinityTerm,
   local secret = k.core.v1.secret,
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
   local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
 
-  // Restic configures a container environment for executing restic commands.
-  // This can be used as a "sleep" init contianer, whereby the operator is
-  // expected to perform the interactions manually.  It can also be used to run
-  // a sidecar container which loops indefinately and executes a backup every X
-  // seconds. For single instance deployments, a cronJob can be used to
-  // schedule a backup job.
-  new(appName, namespace): {
+  // new(appName, namespace) creates a restic backup context. Can be used as a
+  // "sleep" init container (operator runs restic manually), a sidecar that
+  // backs up on an interval, or with a cronJob for single-instance workloads.
+  new(appName, namespace, image='zachfi/restic:latest', sleepContainerSeconds='200'): {
     local this = self,
 
     cacert:: '/tls/ca.crt',
     scriptsVolumeName:: '%s-restic-scripts' % appName,
-    image:: 'zachfi/restic:latest',
+    image:: image,
 
     volumes:: [
       volume.fromConfigMap(this.scriptsVolumeName, this.scriptsVolumeName),
@@ -65,7 +63,8 @@
 
     scriptsConfigMap:
       configMap.new(this.scriptsVolumeName)
-      + configMap.withData(this.configData),
+      + configMap.withData(this.configData)
+      + (if namespace != '' then configMap.metadata.withNamespace(namespace) else {}),
 
     resticContainer::
       container.new('restic', this.image)
@@ -77,13 +76,14 @@
       + kausal.util.resourcesLimits('1', '1Gi'),
 
     // The number of seconds to sleep when executing the sleep.sh script.
-    sleepContainerSeconds:: '200',
+    sleepContainerSeconds:: sleepContainerSeconds,
 
     // A set of key value pairs used to select which nodes the restic cronJob will run on.
     nodeSelector:: {},
 
     backupCron::
       cronJob.new('restic-backup-%s' % appName)
+      + (if namespace != '' then cronJob.metadata.withNamespace(namespace) else {})
       + cronJob.spec.withConcurrencyPolicy('Forbid')
       + cronJob.spec.jobTemplate.spec.withBackoffLimit(1)
       + cronJob.spec.jobTemplate.spec.template.spec.withNodeSelector(this.nodeSelector)
@@ -101,17 +101,23 @@
     image: image,
   },
 
-  withPVC(volumeName, mountPath): {
+  // withPVC adds a path to backup and a mount for the restic container. Also
+  // adds the PVC to volumes so a CronJob can mount it (use withCronPodAffinity
+  // so the CronJob runs on the same node as the workload and can use the PVC).
+  // Use readOnly=false when this backup context is also used for init restore.
+  withPVC(volumeName, mountPath, readOnly=false): {
     configData+: {
       'backup.sh'+: |||
         $RESTIC backup %s
       ||| % mountPath,
     },
 
-    // The volume is expected to be mounted by the workload, so we don't need
-    // to add it here.
     mounts+: [
-      volumeMount.new(volumeName, mountPath),
+      volumeMount.new(volumeName, mountPath, readOnly),
+    ],
+
+    volumes+: [
+      volume.fromPersistentVolumeClaim(volumeName, volumeName),
     ],
   },
 
@@ -137,6 +143,13 @@
     ],
   },
 
+  // withVolume adds a volume to the backup so the CronJob pod can mount it
+  // (e.g. TLS secret). Use together with withVolumeMount when the volume is
+  // added from outside the restic lib (e.g. app withCertificate).
+  withVolume(vol): {
+    volumes+: [vol],
+  },
+
   withNodeSelector(hsh): {
     nodeSelector:: hsh,
   },
@@ -146,7 +159,8 @@
     containerArgs:: ['/restic/sleep.sh'],
   },
 
-  // TODO: this needs to be set non-readonly in withPVC somehow.
+  // withInitRestore sets the init script to restore.sh. Ensure volumes added
+  // via withPVC use readOnly=false when using restore so the container can write.
   withInitRestore(): {
     local this = self,
     containerArgs:: ['/restic/restore.sh'],
@@ -167,7 +181,7 @@
   // secretRefData can be supplied to create the secret from the received data.
   //
   // The bucketURL is the S3 bucket URL, e.g. s3://bucket-name, which is then
-  // used to calculate the repoURL using namespace and name path dilimiters,
+  // used to calculate the repoURL using namespace and name path delimiters,
   // e.g. s3://bucket-name/namespace/name.
   withS3Bucket(
     secretRefName,
@@ -191,6 +205,7 @@
     configSecret:
       if secretRefData != {} then
         secret.new(secretRefName, secretRefData)
+        + secret.metadata.withNamespace(namespace)
       else {},
   },
 
@@ -200,10 +215,21 @@
   // only schedule on a single instance.  If the workload is entirely
   // replicated, this may be sufficient.
 
-  // TODO: work out a way to allow the user to pass in an "instnace" flag which
-  // will change the target volume name to match the workload.  When a
-  // claimTemplate is used as in a statefulset, then we want to match the
-  // volume of the node on which we are scheduled.
+  // Schedule the CronJob pod on the same node as pods matching matchLabels
+  // (e.g. the workload's pods). Required for RWO PVCs: the CronJob can then
+  // mount the same PVC as the workload. Call with the workload's pod selector
+  // labels (e.g. { name: appName }).
+  withCronPodAffinity(matchLabels): {
+    backupCron+:
+      cronJob.spec.jobTemplate.spec.template.spec.affinity.podAffinity.withRequiredDuringSchedulingIgnoredDuringExecution([
+        podAffinityTerm.labelSelector.withMatchLabels(matchLabels)
+        + podAffinityTerm.withTopologyKey('kubernetes.io/hostname'),
+      ]),
+  },
+
+  // TODO: allow an "instance" flag so the backup targets the correct volume
+  // when using a claimTemplate (e.g. statefulset), matching the volume of the
+  // node on which the cron Job is scheduled.
 
   // withBackupCron enables and configures the schedule and ttl for the backup cron job.
   withBackupCron(schedule, ttl=86400): {
@@ -213,7 +239,7 @@
       cronJob.spec.withSchedule(schedule)
       + cronJob.spec.jobTemplate.spec.withTtlSecondsAfterFinished(ttl),
 
-    // Realize the cronJob only when requeted through the use of this function.
+    // Expose the cronJob for rendering when this function is used.
     cron: this.backupCron,
   },
 

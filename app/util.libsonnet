@@ -7,7 +7,8 @@
 //   4. withPDB(), withVPA() — call after (2) so workload is set
 //   5. Other mixins (ports, volumes, certificate, topology spread, etc.) in any order
 //   Include in manifest output as needed: workload, service, and any of pdb, vpa,
-//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc, cron, resticBackup.
+//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc, resticBackup
+//   (and resticBackup.cron when using withResticBackupCron).
 //
 {
   local k = import 'k.libsonnet',
@@ -279,7 +280,8 @@
     },
 
     backup+:
-      restic.withVolumeMount(this.tlsVolumeName, mountPath),
+      restic.withVolumeMount(this.tlsVolumeName, mountPath)
+      + restic.withVolume(volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName)),
   },
 
   withInitContainer(c): {
@@ -605,6 +607,20 @@
   withRestic(): {
     local this = self,
     resticBackup: this.backup,
+  },
+
+  // withResticBackupCron schedules a CronJob that runs restic backup on the
+  // same node as the workload (via pod affinity) so it can mount the workload's
+  // PVC(s). No sidecar or in-container cron needed. Call after withDeployment()/
+  // withStatefulSet()/withDaemonSet() and after withResticS3Backup() and
+  // withLocalDataMount() (or other withPVC sources). Include resticBackup.cron
+  // in your manifest output.
+  withResticBackupCron(schedule, ttl=86400): {
+    local this = self,
+
+    backup+:
+      restic.withBackupCron(schedule, ttl)
+      + restic.withCronPodAffinity(this.workload.spec.selector.matchLabels),
   },
 
   // withMatchLabels adds the given labels to both the workload selector
