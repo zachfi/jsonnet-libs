@@ -16,6 +16,7 @@
   local nodeSelectorTerm = k.core.v1.nodeSelectorTerm,
   local podAntiAffinity = k.core.v1.podAntiAffinity,
   local podAffinityTerm = k.core.v1.podAffinityTerm,
+  local pdb = k.policy.v1.podDisruptionBudget,
   local pvc = k.core.v1.persistentVolumeClaim,
   local pv = k.core.v1.persistentVolume,
   local service = k.core.v1.service,
@@ -25,6 +26,8 @@
 
   local restic = import 'github.com/zachfi/jsonnet-libs/restic/restic.libsonnet',
   local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
+  local vpa = import 'github.com/jsonnet-libs/vertical-pod-autoscaler-libsonnet/1.0.0/main.libsonnet',
+  local verticalPodAutoscaler = vpa.autoscaling.v1.verticalPodAutoscaler,
 
   new(appName, image, namespace): {
     local this = self,
@@ -413,6 +416,75 @@
 
     service:
       this.svc,
+  },
+
+  // withPDB adds a PodDisruptionBudget for the workload. Call after
+  // withDeployment()/withStatefulSet()/withDaemonSet() so the selector
+  // matches the workload. Use maxUnavailable (int or string, e.g. "25%") or
+  // minAvailable, but not both.
+  withPDB(maxUnavailable=1, minAvailable=null): {
+    local this = self,
+
+    pdb:
+      pdb.new(this.appName)
+      + pdb.metadata.withNamespace(this.app.namespace)
+      + pdb.metadata.withLabels({ name: this.appName })
+      + pdb.spec.selector.withMatchLabels(this.workload.spec.selector.matchLabels)
+      + (
+        if minAvailable != null then
+          pdb.spec.withMinAvailable(minAvailable)
+        else
+          pdb.spec.withMaxUnavailable(maxUnavailable)
+      ),
+  },
+
+  // withVPA adds a VerticalPodAutoscaler targeting the workload. Call after
+  // withDeployment()/withStatefulSet()/withDaemonSet(). Optional
+  // containerPolicies can be passed for full control; if omitted, a default
+  // policy is built for the first container using controlledResources and
+  // min/max cpu/memory (all optional). controlledResources is a list of
+  // resource names, e.g. ['cpu', 'memory'] (VPA default).
+  withVPA(
+    updateMode='Auto',
+    minReplicas=1,
+    containerPolicies=null,
+    controlledResources=['cpu', 'memory'],
+    minCpu=null,
+    maxCpu=null,
+    minMemory=null,
+    maxMemory=null,
+  ): {
+    local this = self,
+
+    local minAllowed = (
+      (if minCpu != null then { cpu: minCpu } else {})
+      + (if minMemory != null then { memory: minMemory } else {})
+    ),
+    local maxAllowed = (
+      (if maxCpu != null then { cpu: maxCpu } else {})
+      + (if maxMemory != null then { memory: maxMemory } else {})
+    ),
+
+    local defaultPolicy =
+      verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withContainerName(this.container.name)
+      + verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withMode('Auto')
+      + verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withControlledValues('RequestsAndLimits')
+      + verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withControlledResources(controlledResources)
+      + (if std.length(minAllowed) > 0 then verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withMinAllowed(minAllowed) else {})
+      + (if std.length(maxAllowed) > 0 then verticalPodAutoscaler.spec.resourcePolicy.containerPolicies.withMaxAllowed(maxAllowed) else {}),
+
+    local policies = if containerPolicies != null then
+      containerPolicies
+    else
+      [defaultPolicy],
+
+    vpa:
+      verticalPodAutoscaler.new(this.appName)
+      + verticalPodAutoscaler.metadata.withNamespace(this.app.namespace)
+      + verticalPodAutoscaler.spec.withTargetRef(this.workload)
+      + verticalPodAutoscaler.spec.updatePolicy.withUpdateMode(updateMode)
+      + verticalPodAutoscaler.spec.updatePolicy.withMinReplicas(minReplicas)
+      + verticalPodAutoscaler.spec.resourcePolicy.withContainerPolicies(policies),
   },
 
   withServicePorts(ports=[]): {
