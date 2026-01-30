@@ -440,11 +440,13 @@
   },
 
   // withVPA adds a VerticalPodAutoscaler targeting the workload. Call after
-  // withDeployment()/withStatefulSet()/withDaemonSet(). Optional
-  // containerPolicies can be passed for full control; if omitted, a default
-  // policy is built for the first container using controlledResources and
-  // min/max cpu/memory (all optional). controlledResources is a list of
-  // resource names, e.g. ['cpu', 'memory'] (VPA default).
+  // withDeployment()/withStatefulSet()/withDaemonSet(). When using VPA to
+  // manage resources, do not set resources on the workload (omit withResources)
+  // so VPA is the single source of truth and the workload is not deployed with
+  // conflicting or stale values. Optional containerPolicies can be passed
+  // for full control; if omitted, a default policy is built for the first
+  // container using controlledResources and min/max cpu/memory (all optional).
+  // controlledResources is a list of resource names, e.g. ['cpu', 'memory'].
   withVPA(
     updateMode='Auto',
     minReplicas=1,
