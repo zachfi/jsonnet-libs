@@ -1,6 +1,15 @@
+// Restic backup/restore support for Kubernetes workloads.
+//
+// Preferred: resticForApp(app, opts) at top level. Pass the app and explicit
+// opts (bucketURL, secretRefData, backupTargets: [{ volumeName, mountPath }],
+// schedule, cert or caCertPath for TLS, etc.). No passthrough on the app.
+// Include in manifest: result.scriptsConfigMap, result.configSecret, result.cron.
+//
+// Lower-level: restic.new(appName, namespace) then withS3Bucket, withPVC,
+// withBackupCron, withCronPodAffinity, etc. for custom composition.
+//
 {
   local k = import 'k.libsonnet',
-  local kausal = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
 
   local configMap = k.core.v1.configMap,
   local container = k.core.v1.container,
@@ -72,8 +81,8 @@
       + container.withArgs(this.containerArgs)
       + container.withVolumeMounts(this.mounts)
       + container.withEnv(this.containerEnv)
-      + kausal.util.resourcesRequests('10m', '100Mi')
-      + kausal.util.resourcesLimits('1', '1Gi'),
+      + container.resources.withRequests({ cpu: '10m', memory: '100Mi' })
+      + container.resources.withLimits({ cpu: '1', memory: '1Gi' }),
 
     // The number of seconds to sleep when executing the sleep.sh script.
     sleepContainerSeconds:: sleepContainerSeconds,
@@ -99,6 +108,16 @@
 
   withImage(image):: {
     image: image,
+  },
+
+  // withResticResources sets requests and/or limits on the restic container
+  // (CronJob, init container, sidecar). Pass objects with keys such as cpu and
+  // memory (e.g. requests={ memory: '256Mi' }, limits={ memory: '1Gi' }).
+  // Only non-empty objects are applied.
+  withResticResources(requests={}, limits={}): {
+    resticContainer+:
+      (if std.length(requests) > 0 then container.resources.withRequests(requests) else {})
+      + (if std.length(limits) > 0 then container.resources.withLimits(limits) else {}),
   },
 
   // withPVC adds a path to backup and a mount for the restic container. Also
@@ -150,6 +169,15 @@
     volumes+: [vol],
   },
 
+  // withResticCacert sets RESTIC_CACERT so restic uses the CA cert at the given
+  // path. Use when the CA path comes from a workload cert mount (the app’s
+  // withCertificate calls this). Replaces any RESTIC_CACERT from withS3Bucket.
+  withResticCacert(path): {
+    containerEnv:: (
+      std.filter(function(e) e.name != 'RESTIC_CACERT', super.containerEnv)
+    ) + [envVar.new('RESTIC_CACERT', path)],
+  },
+
   withNodeSelector(hsh): {
     nodeSelector:: hsh,
   },
@@ -183,13 +211,18 @@
   // The bucketURL is the S3 bucket URL, e.g. s3://bucket-name, which is then
   // used to calculate the repoURL using namespace and name path delimiters,
   // e.g. s3://bucket-name/namespace/name.
+  // withS3Bucket configures restic for S3. Optionally set caCertPath when the
+  // S3 endpoint uses a private CA (path to CA cert, e.g. /tls/ca.crt). Omit
+  // when using the app’s withCertificate (it sets RESTIC_CACERT from the cert
+  // mount path). So: S3 + private CA only → caCertPath here; S3 + workload
+  // cert mount → use withCertificate, don’t set caCertPath here.
   withS3Bucket(
     secretRefName,
     bucketURL,
     namespace,
     name,
     secretRefData={},
-    caCertPath='/tls/ca.crt',
+    caCertPath=null,
   ):: {
 
     local repoURL = std.join('/', [bucketURL, namespace, name]),
@@ -199,8 +232,8 @@
       envVar.fromSecretRef('AWS_SECRET_ACCESS_KEY', secretRefName, 'secretKey'),
       envVar.fromSecretRef('RESTIC_PASSWORD', secretRefName, 'resticPassword'),
       envVar.new('RESTIC_REPOSITORY', repoURL),
-      envVar.new('RESTIC_CACERT', caCertPath),
-    ],
+    ]
+    + (if caCertPath != null then [envVar.new('RESTIC_CACERT', caCertPath)] else []),
 
     configSecret:
       if secretRefData != {} then
@@ -256,4 +289,31 @@
       + cronJob.spec.jobTemplate.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
+  // resticForApp builds a restic backup from an app and opts. Use at top level:
+  //   ldap_backup: restic.resticForApp(self.ldap, { bucketURL: ..., secretRefData: ..., backupTargets: [...], schedule: ..., cert: { mountPath, volumeName } or null, ... })
+  // opts: bucketURL, secretRefData (default {}), secretRefName (optional), backupTargets ([{ volumeName, mountPath }]),
+  //       schedule, ttl (default 86400), image (optional), resources (optional { requests, limits }),
+  //       caCertPath (optional, for S3 private CA when not using workload cert), cert (optional { mountPath, volumeName } for workload TLS),
+  //       fsPermissions (optional { uid, gid }), nodeSelector (optional {}).
+  // Include in manifest: result.scriptsConfigMap, result.configSecret (if secretRefData), result.cron.
+  resticForApp(app, opts)::
+    local appName = app.appName;
+    local namespace = app.app.namespace;
+    local matchLabels = app.workload.spec.selector.matchLabels;
+    local secretRefName = if std.objectHas(opts, 'secretRefName') then opts.secretRefName else '%s-restic-config' % appName;
+    local secretRefData = if std.objectHas(opts, 'secretRefData') then opts.secretRefData else {};
+    local caCertPathVal = if std.objectHas(opts, 'caCertPath') then opts.caCertPath else null;
+    local resReqs = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'requests') then opts.resources.requests else {};
+    local resLimits = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'limits') then opts.resources.limits else {};
+    local ttl = if std.objectHas(opts, 'ttl') then opts.ttl else 86400;
+    local b = self.new(appName, namespace)
+      + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, appName, secretRefData=secretRefData, caCertPath=caCertPathVal)
+      + (if std.objectHas(opts, 'image') && opts.image != null then self.withImage(opts.image) else {})
+      + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
+    local b2 = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, b);
+    local b3 = if std.objectHas(opts, 'cert') && opts.cert != null then b2 + self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else b2;
+    local b4 = b3 + self.withBackupCron(opts.schedule, ttl) + self.withCronPodAffinity(matchLabels);
+    local b5 = if std.objectHas(opts, 'fsPermissions') && opts.fsPermissions != null then b4 + self.withFsPermissions(opts.fsPermissions.uid, opts.fsPermissions.gid) else b4;
+    local b6 = if std.objectHas(opts, 'nodeSelector') && opts.nodeSelector != {} then b5 + self.withNodeSelector(opts.nodeSelector) else b5;
+    b6
 }

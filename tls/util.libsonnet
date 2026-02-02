@@ -1,6 +1,5 @@
 {
-  local k = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
-  local kausal = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
+  local k = import 'k.libsonnet',
   local secret = k.core.v1.secret,
 
   local this = self,

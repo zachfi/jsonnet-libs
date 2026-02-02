@@ -7,12 +7,12 @@
 //   4. withPDB(), withVPA() — call after (2) so workload is set
 //   5. Other mixins (ports, volumes, certificate, topology spread, etc.) in any order
 //   Include in manifest output as needed: workload, service, and any of pdb, vpa,
-//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc, resticBackup
-//   (and resticBackup.cron when using withResticBackupCron).
+//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc. For restic backup
+//   use restic.resticForApp(app, opts) at top level and include its
+//   scriptsConfigMap, configSecret, cron.
 //
 {
   local k = import 'k.libsonnet',
-  local kausal = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
 
   local configMap = k.core.v1.configMap,
   local container = k.core.v1.container,
@@ -35,7 +35,6 @@
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
-  local restic = import 'github.com/zachfi/jsonnet-libs/restic/restic.libsonnet',
   local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
   local vpa = import 'github.com/jsonnet-libs/vertical-pod-autoscaler-libsonnet/1.0.0/main.libsonnet',
   local verticalPodAutoscaler = vpa.autoscaling.v1.verticalPodAutoscaler,
@@ -64,8 +63,6 @@
     // volumes and mounts are realized by the default workload objects.
     volumes:: [],
     mounts:: [],
-
-    backup:: restic.new(appName, namespace),
 
     defaultContainer(name, image)::
       container.new(name, image)
@@ -148,9 +145,6 @@
 
     cronJob+:
       cronJob.spec.jobTemplate.spec.template.spec.withNodeSelector(hsh),
-
-    backup+:
-      restic.withNodeSelector(hsh),
   },
 
   withTerminationGracePeriodSeconds(seconds): {
@@ -255,6 +249,7 @@
 
   withCertificate(issuer='vault-issuer', tld='cluster.local', altNames=[], mountPath='/tls'): {
     local this = self,
+    local certVolume = volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
 
     certificate:
       tls.newSimpleCert(
@@ -268,9 +263,15 @@
       volumeMount.new(this.tlsVolumeName, mountPath),
     ],
 
-    volumes+: [
-      volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),
-    ],
+    // Add TLS volume directly to each workload so the volume is always present
+    // (avoids "volume not found" when spec is built from this.volumes in some evaluation contexts).
+    // Use withVolumesMixin so we don't assume spec.template.spec.volumes exists yet.
+    deployment+:
+      deployment.spec.template.spec.withVolumesMixin([certVolume]),
+    statefulset+:
+      statefulset.spec.template.spec.withVolumesMixin([certVolume]),
+    daemonset+:
+      daemonset.spec.template.spec.withVolumesMixin([certVolume]),
 
     // Stakater Reloader: when this secret changes, Reloader restarts the
     // workload. Requires the Reloader controller to be installed (e.g. via
@@ -279,9 +280,6 @@
       'secret.reloader.stakater.com/reload': this.tlsVolumeName,
     },
 
-    backup+:
-      restic.withVolumeMount(this.tlsVolumeName, mountPath)
-      + restic.withVolume(volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName)),
   },
 
   withInitContainer(c): {
@@ -289,19 +287,6 @@
 
     initContainers+: [
       c
-      + container.withVolumeMountsMixin(this.mounts),
-    ],
-  },
-
-  // withInitRestoreSleep is used to add a sleep container to the init which
-  // can be used to manually with restic.
-  withInitRestoreSleep(sleepSeconds=100): {
-    local this = self,
-
-    initContainers+: [
-      this.backup.resticContainer
-      + container.withCommand('sleep')
-      + container.withArgs([sleepSeconds])
       + container.withVolumeMountsMixin(this.mounts),
     ],
   },
@@ -406,15 +391,6 @@
 
   },
 
-  withInitRestore(): {
-    local this = self,
-    deployment+:
-      deployment.spec.template.spec.withInitContainers(this.backup.resticContainer),
-
-    statefulset+:
-      statefulset.spec.template.spec.withInitContainers(this.backup.resticContainer),
-  },
-
   withInitChown(path, uid, gid):: {
     local this = self,
 
@@ -431,9 +407,6 @@
   },
 
   withFsPermissions(uid, gid): {
-    backup+:
-      restic.withFsPermissions(uid, gid),
-
     // This worked for the init container to restore the data, but when
     // starting the another container, root was now not root, so was unable to
     // mkdir in /var/run (owned by root).  Not sure the right workaround.
@@ -583,46 +556,6 @@
   // were referenced, the credentials would be unique.  But as I type this, I
   // see that apps may want to use different credentials for the same bucket.
 
-  // withResticS3Backup enables restic backups to s3 for the workload.  The
-  // bucketURL is the root of the bucket, which the app should have read and
-  // write access to.  The secretRefName is the name of the secret that
-  // contains the restic credentials.  The secretRefData is the data to be
-  // stored in the secret. If secretRefData is not provided, the secret will
-  // not be created, and the app is responsible for creating the secret.  The
-  // referenced secret or the secretRefData must contain the `accessKey` and
-  // `secretKey` keys.
-  withResticS3Backup(bucketURL, secretRefName='restic-config', secretRefData={}, image='zalegrala/restic:latest'): {
-    local this = self,
-
-    local refName = '%s-%s' % [this.appName, secretRefName],
-
-    backup+:
-      restic.withS3Bucket(refName, bucketURL, this.app.namespace, this.appName, secretRefData=secretRefData)
-      + restic.withImage(image),
-
-    // Include the backup volumes so that containers can mount them.
-    volumes+: this.backup.volumes,
-  },
-
-  withRestic(): {
-    local this = self,
-    resticBackup: this.backup,
-  },
-
-  // withResticBackupCron schedules a CronJob that runs restic backup on the
-  // same node as the workload (via pod affinity) so it can mount the workload's
-  // PVC(s). No sidecar or in-container cron needed. Call after withDeployment()/
-  // withStatefulSet()/withDaemonSet() and after withResticS3Backup() and
-  // withLocalDataMount() (or other withPVC sources). Include resticBackup.cron
-  // in your manifest output.
-  withResticBackupCron(schedule, ttl=86400): {
-    local this = self,
-
-    backup+:
-      restic.withBackupCron(schedule, ttl)
-      + restic.withCronPodAffinity(this.workload.spec.selector.matchLabels),
-  },
-
   // withMatchLabels adds the given labels to both the workload selector
   // (spec.selector.matchLabels) and the pod template (spec.template.metadata.labels),
   // so selector and template stay in sync. Use for labels that identify which pods
@@ -636,9 +569,6 @@
     statefulset+:
       statefulset.spec.template.metadata.withLabelsMixin(matchers)
       + statefulset.spec.selector.withMatchLabels(matchers),
-
-    backup+:
-      restic.withMatchLabels(matchers),
   },
 
   withConfigmapMount(mountPath, data, subPath='', nameOverride=''): {
@@ -677,9 +607,10 @@
     ],
   },
 
-  // NOTE: For backups, this must be called after the withResticS3Backup()
-  // function, since we need to extend the backup here to include this PVC in
-  // the backup.
+  // withLocalDataMount adds a PVC and mounts it on the workload. To back it up
+  // with restic, use restic.resticForApp(app, { ..., backupTargets: [{
+  // volumeName: this.dataVolumeName, mountPath }], ... }) and pass the same
+  // volumeName and mountPath.
   withLocalDataMount(mountPath='/data', storageClass='local-path', size='10Gi'): {
     local this = self,
 
@@ -699,12 +630,6 @@
       + pvc.metadata.withLabels({ app: this.appName }),
 
     pvc+: [dataPvc],
-
-    // statefulset+:
-    //   statefulset.spec.withVolumeClaimTemplatesMixin(dataPvc),
-
-    backup+:
-      restic.withPVC(this.dataVolumeName, mountPath),
   },
 
   withCharDevice(volumeName, mountPath, mount=true): {
@@ -812,8 +737,8 @@
       ])
       + container.withArgs(args)
       + container.withEnvMixin(env)
-      + kausal.util.resourcesRequests('10m', '100Mi')
-      + kausal.util.resourcesLimits('500m', '1Gi'),
+      + container.resources.withRequests({ cpu: '10m', memory: '100Mi' })
+      + container.resources.withLimits({ cpu: '500m', memory: '1Gi' }),
 
     deployment+::
       deployment.spec.template.metadata.withAnnotationsMixin({

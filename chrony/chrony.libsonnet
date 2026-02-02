@@ -1,6 +1,5 @@
 {
   local k = import 'k.libsonnet',
-  local kausal = import 'github.com/grafana/jsonnet-libs/ksonnet-util/kausal.libsonnet',
 
   local app = import 'github.com/zachfi/jsonnet-libs/app/util.libsonnet',
 
@@ -29,6 +28,7 @@
       'chrony.conf': this.serverConfig,
     },
 
+    // TODO: make this more configurable
     clientConfig:: |||
       server chrony-server.time.svc.cluster.znet
 
@@ -125,8 +125,8 @@
       + container.mixin.livenessProbe.withTimeoutSeconds(5),
 
     limits::
-      kausal.util.resourcesRequests('10m', '10Mi')
-      + kausal.util.resourcesLimits('250m', '50Mi'),
+      container.resources.withRequests({ cpu: '10m', memory: '10Mi' })
+      + container.resources.withLimits({ cpu: '250m', memory: '50Mi' }),
   },
 
   withGPSDevice(device='/dev/ttyACM0', nodeKey='gps_device', nodeValue='ttyACM0'): {
