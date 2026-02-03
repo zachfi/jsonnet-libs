@@ -15,8 +15,9 @@ ROOT ?= ..
 OUT_DIR ?= out
 APP_ENVS ?= app chrony
 
-# For check/clean we need paths like compiled/app/gen compiled/chrony/gen.
-GEN_DIRS := $(addprefix compiled/,$(addsuffix /gen,$(APP_ENVS)))
+# Only compiled/<env>/gen is committed and checked. out/ is local-only (jsonnetfile snapshot).
+CHECK_GEN_DIRS := $(addprefix compiled/,$(addsuffix /gen,$(APP_ENVS)))
+GEN_DIRS := $(addsuffix /gen,$(APP_ENVS))
 
 .PHONY: all jb copy-jsonnetfile gen check check-examples clean
 
@@ -45,17 +46,18 @@ gen: jb copy-jsonnetfile
 		rm -rf compiled/.tk-out-$$env) || exit 1; \
 	done
 
-# Check for modified or untracked files under out/ and each compiled/<env>/gen.
+# Check only compiled/<env>/gen: (1) all generated files tracked and up to date,
+# (2) deleted files removed from git, (3) any diff fails. Run git from repo root.
 check: gen check-examples
 
 check-examples:
-	@git diff --exit-code -- $(OUT_DIR) $(GEN_DIRS) || (echo "Error: uncommitted changes in $(OUT_DIR) or compiled/*/gen. Commit updated output after 'make gen'."; exit 1)
-	@if [ -n "$$(git ls-files --others --exclude-standard $(OUT_DIR) $(GEN_DIRS))" ]; then \
-		echo "Error: Untracked files in $(OUT_DIR) or compiled/*/gen:"; \
-		git ls-files --others --exclude-standard $(OUT_DIR) $(GEN_DIRS); \
+	@cd $(ROOT) && git diff --exit-code -- $(CHECK_GEN_DIRS) || (echo "Error: uncommitted changes in compiled/*/gen. Commit updated output after 'make gen'."; exit 1)
+	@cd $(ROOT) && if [ -n "$$(git ls-files --others --exclude-standard $(CHECK_GEN_DIRS))" ]; then \
+		echo "Error: Untracked files in compiled/*/gen:"; \
+		git ls-files --others --exclude-standard $(CHECK_GEN_DIRS); \
 		echo ""; \
-		echo "To make check pass, add and commit the generated files:"; \
-		echo "  git add $(OUT_DIR) $(GEN_DIRS)"; \
+		echo "To make check pass, add and commit the generated files (from repo root):"; \
+		echo "  git add $(CHECK_GEN_DIRS)"; \
 		echo "  git commit -m 'chore: compiled jsonnet output'"; \
 		exit 1; \
 	fi
