@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-backup-ldap
+  namespace: auth
+spec:
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            name: restic-backup-ldap
+        spec:
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app: ldap
+                    name: ldap
+                topologyKey: kubernetes.io/hostname
+          containers:
+          - args:
+            - /restic/backup.sh
+            command:
+            - /bin/bash
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  key: accessKey
+                  name: ldap-restic-config
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: secretKey
+                  name: ldap-restic-config
+            - name: RESTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: resticPassword
+                  name: ldap-restic-config
+            - name: RESTIC_REPOSITORY
+              value: s3://mock-bucket/auth/ldap
+            - name: RESTIC_CACERT
+              value: /ldap/tls/ca.crt
+            image: zachfi/restic:latest
+            name: restic
+            resources:
+              limits:
+                cpu: "1"
+                memory: 1Gi
+              requests:
+                cpu: 10m
+                memory: 100Mi
+            volumeMounts:
+            - mountPath: /restic
+              name: ldap-restic-scripts
+            - mountPath: /bitnami/openldap
+              name: ldap-data
+            - mountPath: /ldap/tls
+              name: ldap-tls
+          nodeSelector: {}
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 1001
+            runAsUser: 1001
+          volumes:
+          - configMap:
+              name: ldap-restic-scripts
+            name: ldap-restic-scripts
+          - name: ldap-data
+            persistentVolumeClaim:
+              claimName: ldap-data
+          - name: ldap-tls
+            secret:
+              secretName: ldap-tls
+      ttlSecondsAfterFinished: 86400
+  schedule: 0 */6 * * *

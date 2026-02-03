@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ldap
+  namespace: auth
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ldap
+      name: ldap
+  serviceName: ldap
+  template:
+    metadata:
+      annotations:
+        config_hash: d304ec1cac3dd875a97821730303d1e2
+        container_hash: af0f9f5a36948df7d987910b4bde5b2d
+        secret.reloader.stakater.com/reload: ldap-tls
+      labels:
+        app: ldap
+        name: ldap
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - ldap
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - env:
+        - name: LDAP_SKIP_DEFAULT_TREE
+          value: "yes"
+        - name: LDAP_ROOT
+          value: dc=znet
+        - name: LDAP_CUSTOM_LDIF_DIR
+          value: /ldifs
+        - name: LDAP_ENABLE_TLS
+          value: "yes"
+        - name: LDAP_TLS_CERT_FILE
+          value: /ldap/tls/tls.crt
+        - name: LDAP_TLS_KEY_FILE
+          value: /ldap/tls/tls.key
+        - name: LDAP_TLS_CA_FILE
+          value: /ldap/tls/ca.crt
+        image: bitnami/openldap:latest
+        imagePullPolicy: IfNotPresent
+        name: ldap
+        ports:
+        - containerPort: 1636
+          name: ldaps
+        - containerPort: 1389
+          name: ldap
+        securityContext:
+          runAsNonRoot: true
+        volumeMounts:
+        - mountPath: /bitnami/openldap
+          name: ldap-data
+        - mountPath: /ldifs
+          name: ldap-ldif
+        - mountPath: /ldif_config
+          name: ldap-config-ldif
+        - mountPath: /ldap/tls
+          name: ldap-tls
+      initContainers: []
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+      volumes:
+      - name: ldap-data
+        persistentVolumeClaim:
+          claimName: ldap-data
+      - configMap:
+          name: ldap-ldif
+        name: ldap-ldif
+      - configMap:
+          name: ldap-config-ldif
+        name: ldap-config-ldif
+      - name: ldap-tls
+        secret:
+          secretName: ldap-tls
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      labels:
+        app: ldap
+      name: ldap-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 200Mi
+      storageClassName: local-path

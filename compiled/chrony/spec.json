@@ -1,0 +1,11 @@
+{
+  "apiVersion": "spec.tanka.dev/v1beta1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "chrony"
+  },
+  "spec": {
+    "apiServer": "https://kubernetes.default.svc",
+    "namespace": "time"
+  }
+}

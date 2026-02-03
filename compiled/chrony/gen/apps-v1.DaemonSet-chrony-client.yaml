@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chrony-client
+  namespace: time
+spec:
+  selector:
+    matchLabels:
+      name: chrony-client
+  template:
+    metadata:
+      annotations:
+        chrony_conf_hash: 2e8a0c2d1ed718793ca76b20fa56e05b
+        container_hash: 063cac851f8a71d6e08ef855e5f9bd22
+      labels:
+        name: chrony-client
+    spec:
+      containers:
+      - args:
+        - chronyd
+        - -d
+        - -s
+        - -f
+        - /etc/chrony.conf
+        image: zachfi/chrony:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - chronyc
+            - tracking
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: chrony-client
+        ports:
+        - containerPort: 123
+          name: ntp
+          protocol: UDP
+        readinessProbe:
+          exec:
+            command:
+            - chronyc
+            - tracking
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 250m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        securityContext:
+          capabilities:
+            add:
+            - SYS_TIME
+        volumeMounts:
+        - mountPath: /etc/localtime
+          name: etclocaltime
+          readOnly: true
+        - mountPath: /etc/chrony.conf
+          name: chrony-client-config-chronyconf
+          subPath: chrony.conf
+      initContainers: []
+      volumes:
+      - hostPath:
+          path: /etc/localtime
+          type: ""
+        name: etclocaltime
+      - configMap:
+          name: chrony-client-config-chronyconf
+        name: chrony-client-config-chronyconf

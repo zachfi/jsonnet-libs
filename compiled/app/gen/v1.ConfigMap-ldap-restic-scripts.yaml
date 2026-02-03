@@ -1,0 +1,25 @@
+apiVersion: v1
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -e
+    RESTIC="restic -v"
+    $RESTIC backup /bitnami/openldap
+  init.sh: |
+    #!/bin/bash
+    set -e
+    RESTIC="restic -v"
+    $RESTIC snapshots || $RESTIC init
+  restore.sh: |
+    #!/bin/bash
+    set -e
+    RESTIC="restic -v"
+    $RESTIC restore latest --target /
+  sleep.sh: |
+    #!/bin/bash
+    echo "Sleeping for 200 seconds"
+    sleep 200
+kind: ConfigMap
+metadata:
+  name: ldap-restic-scripts
+  namespace: auth

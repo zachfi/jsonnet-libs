@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrony-server
+  namespace: time
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: chrony-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+        chrony_conf_hash: 9db9313e7778936b3c48156147097273
+        container_hash: 753257a0642f4e92976e7440e41f87de
+      labels:
+        name: chrony-server
+    spec:
+      containers:
+      - args:
+        - chronyd
+        - -d
+        - -s
+        - -f
+        - /etc/chrony.conf
+        image: zachfi/chrony:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - chronyc
+            - tracking
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: chrony-server
+        ports:
+        - containerPort: 123
+          name: ntp
+          protocol: UDP
+        readinessProbe:
+          exec:
+            command:
+            - chronyc
+            - tracking
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 250m
+            memory: 50Mi
+          requests:
+            cpu: 10m
+            memory: 10Mi
+        securityContext:
+          capabilities:
+            add:
+            - SYS_TIME
+        volumeMounts:
+        - mountPath: /etc/localtime
+          name: etclocaltime
+          readOnly: true
+        - mountPath: /etc/chrony.conf
+          name: chrony-server-config-chronyconf
+          subPath: chrony.conf
+      initContainers: []
+      terminationGracePeriodSeconds: 45
+      volumes:
+      - hostPath:
+          path: /etc/localtime
+          type: ""
+        name: etclocaltime
+      - configMap:
+          name: chrony-server-config-chronyconf
+        name: chrony-server-config-chronyconf

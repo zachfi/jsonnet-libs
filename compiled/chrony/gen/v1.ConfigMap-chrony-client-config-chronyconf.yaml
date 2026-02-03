@@ -1,0 +1,21 @@
+apiVersion: v1
+data:
+  chrony.conf: |
+    server chrony-server.time.svc.cluster.znet
+
+    server 0.us.pool.ntp.org
+    server 1.us.pool.ntp.org
+    server 2.us.pool.ntp.org
+    server 3.us.pool.ntp.org
+
+    #cmdallow 127/8
+    driftfile /var/lib/chrony/drift
+    #local stratum 10
+    makestep .1 -1
+    rtcsync
+    rtconutc
+    allow
+kind: ConfigMap
+metadata:
+  name: chrony-client-config-chronyconf
+  namespace: time

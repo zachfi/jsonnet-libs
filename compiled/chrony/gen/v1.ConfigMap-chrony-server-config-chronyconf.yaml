@@ -1,0 +1,11 @@
+apiVersion: v1
+data:
+  chrony.conf: "server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org\nserver
+    3.us.pool.ntp.org\n\ndriftfile /var/lib/chrony/drift\nmakestep .1 -1\n\nallow\n\n#refclock
+    SOCK /run/chrony.ttyACM0.sock refid GPS  precision 1e-3 offset 0.011\n#refclock
+    SOCK /run/chrony.pps0.sock    refid PPS  precision 1e-7\nrefclock SHM  0                        refid
+    NMEA precision 1e-3 poll 3 offset 0.011 \n"
+kind: ConfigMap
+metadata:
+  name: chrony-server-config-chronyconf
+  namespace: time

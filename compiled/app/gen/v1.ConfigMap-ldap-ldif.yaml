@@ -1,0 +1,12 @@
+apiVersion: v1
+data:
+  groups.ldif: |
+    dn: ou=groups
+    ou: groups
+  people.ldif: |
+    dn: ou=people
+    ou: people
+kind: ConfigMap
+metadata:
+  name: ldap-ldif
+  namespace: auth

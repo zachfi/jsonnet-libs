@@ -1,0 +1,10 @@
+apiVersion: v1
+data:
+  cn_config_init.ldif: |
+    dn: cn=config
+    objectClass: olcGlobal
+    cn: config
+kind: ConfigMap
+metadata:
+  name: ldap-config-ldif
+  namespace: auth
