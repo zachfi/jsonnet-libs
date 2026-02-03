@@ -1,9 +1,11 @@
 // Restic backup/restore support for Kubernetes workloads.
 //
 // Preferred: resticForApp(app, opts) at top level. Pass the app and explicit
-// opts (bucketURL, secretRefData, backupTargets: [{ volumeName, mountPath }],
-// schedule, cert or caCertPath for TLS, etc.). No passthrough on the app.
-// Include in manifest: result.scriptsConfigMap, result.configSecret, result.cron.
+// opts (bucketURL, secretRefName, backupTargets: [{ volumeName, mountPath }],
+// schedule, cert or caCertPath for TLS, etc.). The Secret must exist (caller
+// creates it or syncs via ExternalSecret); the library only references it.
+// Include in manifest: result.scriptsConfigMap, result.cron (and the Secret
+// or ExternalSecret from the app).
 //
 // Lower-level: restic.new(appName, namespace) then withS3Bucket, withPVC,
 // withBackupCron, withCronPodAffinity, etc. for custom composition.
@@ -17,7 +19,6 @@
   local envVar = k.core.v1.envVar,
   local job = k.batch.v1.job,
   local podAffinityTerm = k.core.v1.podAffinityTerm,
-  local secret = k.core.v1.secret,
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
@@ -200,46 +201,36 @@
     containerArgs:: [script],
   },
 
-  // withS3Bucket sets up the environment variables for restic to use an S3 bucket
-  // The secret should contain the following keys:
-  // - accessKey
-  // - secretKey
-  // - resticPassword
+  // withS3Bucket sets up the environment variables for restic to use an S3 bucket.
+  // The Secret must already exist (e.g. created by the app, or synced via ExternalSecret
+  // from Vault). This library only references it by name and key mapping.
   //
-  // secretRefData can be supplied to create the secret from the received data.
-  //
-  // The bucketURL is the S3 bucket URL, e.g. s3://bucket-name, which is then
-  // used to calculate the repoURL using namespace and name path delimiters,
-  // e.g. s3://bucket-name/namespace/name.
-  // withS3Bucket configures restic for S3. Optionally set caCertPath when the
-  // S3 endpoint uses a private CA (path to CA cert, e.g. /tls/ca.crt). Omit
-  // when using the app’s withCertificate (it sets RESTIC_CACERT from the cert
-  // mount path). So: S3 + private CA only → caCertPath here; S3 + workload
-  // cert mount → use withCertificate, don’t set caCertPath here.
+  // secretRefName: name of the existing Secret in the same namespace.
+  // secretKeys: optional mapping of logical names to secret key names. Defaults assume
+  //   the secret has keys 'accessKey', 'secretKey', 'resticPassword'. Override when
+  //   your secret uses different key names (e.g. from Vault).
+  // bucketURL: S3 bucket URL, e.g. s3://bucket-name; repo URL becomes
+  //   s3://bucket-name/namespace/name.
+  // caCertPath: optional path to CA cert for S3 (e.g. /tls/ca.crt). Omit when using
+  //   workload cert mount and withResticCacert.
   withS3Bucket(
     secretRefName,
     bucketURL,
     namespace,
     name,
-    secretRefData={},
+    secretKeys={ accessKey: 'accessKey', secretKey: 'secretKey', resticPassword: 'resticPassword' },
     caCertPath=null,
   ):: {
 
     local repoURL = std.join('/', [bucketURL, namespace, name]),
 
     containerEnv+: [
-      envVar.fromSecretRef('AWS_ACCESS_KEY_ID', secretRefName, 'accessKey'),
-      envVar.fromSecretRef('AWS_SECRET_ACCESS_KEY', secretRefName, 'secretKey'),
-      envVar.fromSecretRef('RESTIC_PASSWORD', secretRefName, 'resticPassword'),
+      envVar.fromSecretRef('AWS_ACCESS_KEY_ID', secretRefName, secretKeys.accessKey),
+      envVar.fromSecretRef('AWS_SECRET_ACCESS_KEY', secretRefName, secretKeys.secretKey),
+      envVar.fromSecretRef('RESTIC_PASSWORD', secretRefName, secretKeys.resticPassword),
       envVar.new('RESTIC_REPOSITORY', repoURL),
     ]
     + (if caCertPath != null then [envVar.new('RESTIC_CACERT', caCertPath)] else []),
-
-    configSecret:
-      if secretRefData != {} then
-        secret.new(secretRefName, secretRefData)
-        + secret.metadata.withNamespace(namespace)
-      else {},
   },
 
   // A backup cronJob can be used for workloads which have a single instance.
@@ -290,24 +281,25 @@
   },
 
   // resticForApp builds a restic backup from an app and opts. Use at top level:
-  //   ldap_backup: restic.resticForApp(self.ldap, { bucketURL: ..., secretRefData: ..., backupTargets: [...], schedule: ..., cert: { mountPath, volumeName } or null, ... })
-  // opts: bucketURL, secretRefData (default {}), secretRefName (optional), backupTargets ([{ volumeName, mountPath }]),
-  //       schedule, ttl (default 86400), image (optional), resources (optional { requests, limits }),
-  //       caCertPath (optional, for S3 private CA when not using workload cert), cert (optional { mountPath, volumeName } for workload TLS),
+  //   backup: restic.resticForApp(self.ldap, { bucketURL: ..., secretRefName: ..., backupTargets: [...], schedule: ..., cert: ... })
+  // opts: bucketURL, secretRefName (optional, default '%s-restic-config' % appName), secretKeys (optional key mapping),
+  //       backupTargets ([{ volumeName, mountPath }]), schedule, ttl (default 86400), image (optional),
+  //       resources (optional { requests, limits }), caCertPath (optional), cert (optional { mountPath, volumeName }),
   //       fsPermissions (optional { uid, gid }), nodeSelector (optional {}).
-  // Include in manifest: result.scriptsConfigMap, result.configSecret (if secretRefData), result.cron.
+  // Caller must ensure the Secret exists (e.g. create it in the app or use ExternalSecret). Include in manifest:
+  //   result.scriptsConfigMap, result.cron, and the Secret/ExternalSecret from the app.
   resticForApp(app, opts)::
     local appName = app.appName;
     local namespace = app.app.namespace;
     local matchLabels = app.workload.spec.selector.matchLabels;
     local secretRefName = if std.objectHas(opts, 'secretRefName') then opts.secretRefName else '%s-restic-config' % appName;
-    local secretRefData = if std.objectHas(opts, 'secretRefData') then opts.secretRefData else {};
+    local secretKeys = if std.objectHas(opts, 'secretKeys') then opts.secretKeys else { accessKey: 'accessKey', secretKey: 'secretKey', resticPassword: 'resticPassword' };
     local caCertPathVal = if std.objectHas(opts, 'caCertPath') then opts.caCertPath else null;
     local resReqs = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'requests') then opts.resources.requests else {};
     local resLimits = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'limits') then opts.resources.limits else {};
     local ttl = if std.objectHas(opts, 'ttl') then opts.ttl else 86400;
     local b = self.new(appName, namespace)
-      + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, appName, secretRefData=secretRefData, caCertPath=caCertPathVal)
+      + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, appName, secretKeys=secretKeys, caCertPath=caCertPathVal)
       + (if std.objectHas(opts, 'image') && opts.image != null then self.withImage(opts.image) else {})
       + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
     local b2 = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, b);

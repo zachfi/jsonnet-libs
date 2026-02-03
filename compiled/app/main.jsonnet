@@ -1,12 +1,13 @@
 // Single app output: LDAP-style StatefulSet mock using only jsonnet-libs (app, tls, restic).
 // No znet/* or ldif imports; inline mock data so this evaluates and generates useful manifests.
 // Invocation pattern matches real usage: app.new + mixins, then restic.resticForApp at top level.
+local k = import 'github.com/jsonnet-libs/k8s-libsonnet/1.33/main.libsonnet';
 local app = import 'github.com/zachfi/jsonnet-libs/app/util.libsonnet';
 local restic = import 'github.com/zachfi/jsonnet-libs/restic/restic.libsonnet';
-local k = import 'github.com/jsonnet-libs/k8s-libsonnet/1.33/main.libsonnet';
 
 local containerPort = k.core.v1.containerPort;
 local envVar = k.core.v1.envVar;
+local secret = k.core.v1.secret;
 local servicePort = k.core.v1.servicePort;
 
 local namespace = 'auth';
@@ -59,14 +60,20 @@ local ldap =
     envVar.new('LDAP_TLS_CA_FILE', '/ldap/tls/ca.crt'),
   ]);
 
-// Restic backup at top level (resticForApp); include its outputs in manifest.
+// Restic backup: caller owns the Secret (or ExternalSecret). This sample creates a
+// static Secret; in production you would use ExternalSecret to sync from Vault.
+local resticSecretName = '%s-restic-config' % appName;
+local resticSecret =
+  secret.new(resticSecretName, {
+    accessKey: std.base64('mock-access'),
+    secretKey: std.base64('mock-secret'),
+    resticPassword: std.base64('mock-restic-pw'),
+  })
+  + secret.metadata.withNamespace(namespace);
+
 local backup = restic.resticForApp(ldap, {
   bucketURL: 's3://mock-bucket',
-  secretRefData: {
-    accessKey: 'mock-access',
-    secretKey: 'mock-secret',
-    resticPassword: 'mock-restic-pw',
-  },
+  secretRefName: resticSecretName,
   backupTargets: [
     { volumeName: ldap.dataVolumeName, mountPath: '/bitnami/openldap' },
   ],
@@ -82,13 +89,13 @@ local backup = restic.resticForApp(ldap, {
   ldap.service,
   ldap.certificate,
 ] + ldap.pvc
-  + [
-    backup.scriptsConfigMap,
-    backup.configSecret,
-    backup.backupCron,
-  ]
-  + [
-    // ConfigMaps from withConfigmapMount (keys are dynamic).
-    ldap['configmap_config__%s-ldif' % appName],
-    ldap['configmap_config__%s-config-ldif' % appName],
-  ]
++ [
+  resticSecret,
+  backup.scriptsConfigMap,
+  backup.backupCron,
+]
++ [
+  // ConfigMaps from withConfigmapMount (keys are dynamic).
+  ldap['configmap_config__%s-ldif' % appName],
+  ldap['configmap_config__%s-config-ldif' % appName],
+]

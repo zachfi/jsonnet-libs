@@ -73,15 +73,15 @@ spec:
         runAsNonRoot: true
         runAsUser: 1001
       volumes:
-      - name: ldap-data
-        persistentVolumeClaim:
-          claimName: ldap-data
       - configMap:
           name: ldap-ldif
         name: ldap-ldif
       - configMap:
           name: ldap-config-ldif
         name: ldap-config-ldif
+      - name: ldap-data
+        persistentVolumeClaim:
+          claimName: ldap-data
       - name: ldap-tls
         secret:
           secretName: ldap-tls
