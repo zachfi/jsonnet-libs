@@ -21,13 +21,16 @@ local ldap_backup_targets = [
     + app.withCertificate(tld='cluster.local', mountPath='/ldap/tls')  // or your cluster DNS domain
     + ...,
 
+  // Caller owns the Secret (or use ExternalSecret from Vault).
+  ldap_restic_secret: k.core.v1.secret.new('ldap-restic-config', {
+    accessKey: std.base64(data.restic.accessKey),
+    secretKey: std.base64(data.restic.secretKey),
+    resticPassword: std.base64(data.restic.resticPassword),
+  }) + k.core.v1.secret.metadata.withNamespace(namespace),
+
   ldap_backup: restic.resticForApp(self.ldap, {
     bucketURL: data.restic.bucketURL,
-    secretRefData: {
-      accessKey: data.restic.accessKey,
-      secretKey: data.restic.secretKey,
-      resticPassword: data.restic.resticPassword,
-    },
+    secretRefName: 'ldap-restic-config',
     backupTargets: ldap_backup_targets,
     schedule: '0 */6 * * *',
     ttl: 86400,
@@ -40,15 +43,15 @@ local ldap_backup_targets = [
 }
 ```
 
-Include in your manifest: `ldap_backup.scriptsConfigMap`, `ldap_backup.configSecret`, `ldap_backup.cron`.
+Include in your manifest: the restic Secret (or ExternalSecret) from the app, `ldap_backup.scriptsConfigMap`, `ldap_backup.cron`.
 
 ### opts
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | bucketURL | yes | S3 bucket URL (e.g. `s3:https://s3.example:9000/bucket`) |
-| secretRefData | no | `{ accessKey, secretKey, resticPassword }`; if set, creates the secret |
-| secretRefName | no | Secret name (default `appName-restic-config`) |
+| secretRefName | no | Name of existing Secret (default `appName-restic-config`). Caller must create or sync it. |
+| secretKeys | no | Map of logical keys to secret key names: `{ accessKey, secretKey, resticPassword }`. Override when your secret uses different names (e.g. from Vault). |
 | backupTargets | yes | `[ { volumeName, mountPath } ]` — only these volumes are backed up |
 | schedule | yes | Cron schedule (e.g. `'0 */6 * * *'`) |
 | ttl | no | Job TTL seconds (default 86400) |
@@ -66,15 +69,9 @@ Use **cert** when the app uses `withCertificate` and the cert is mounted at a cu
 - `k.libsonnet` (Kubernetes Jsonnet lib, e.g. `github.com/jsonnet-libs/k8s-libsonnet/1.33`)
 - `github.com/zachfi/jsonnet-libs/tls/util.libsonnet` (optional; for restic lib’s `withCertificate` when composing manually)
 
-## S3 secret
+## Secrets (caller-owned)
 
-When providing `secretRefData`, it must contain:
-
-- **accessKey** — S3 access key
-- **secretKey** — S3 secret key
-- **resticPassword** — Restic repository password
-
-Repo URL is `bucketURL/namespace/appName` (e.g. `s3:https://.../pvbackups/auth/ldap`).
+The restic library does not create the S3/restic Secret. You must provide a Secret (or ExternalSecret) in the same namespace with keys: **accessKey**, **secretKey**, **resticPassword**. Create it in your app or use an ExternalSecret (e.g. from Vault). Pass `secretRefName` to resticForApp and optionally `secretKeys` if your secret uses different key names. Repo URL is `bucketURL/namespace/appName` (e.g. `s3:https://.../pvbackups/auth/ldap`).
 
 ## Lower-level usage
 

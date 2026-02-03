@@ -7,9 +7,14 @@
 //   4. withPDB(), withVPA() — call after (2) so workload is set
 //   5. Other mixins (ports, volumes, certificate, topology spread, etc.) in any order
 //   Include in manifest output as needed: workload, service, and any of pdb, vpa,
-//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc. For restic backup
-//   use restic.resticForApp(app, opts) at top level and include its
-//   scriptsConfigMap, configSecret, cron.
+//   certificate, configmap_*, sidecarCronConfigMaps, pv, pvc.
+//
+// Backup (restic) is decoupled from the app. The app does not expose backup methods or
+// a backup: key. Instead, define the app as a top-level key (e.g. myapp: app.new(...)),
+// then create a separate key (e.g. myapp_backup: restic.resticForApp(self.myapp, opts)).
+// That gives explicit control over the restic CronJob and its resources; the CronJob
+// uses pod affinity to run on the same nodes as the workload so local PVCs are available.
+// Include in manifest: backup.scriptsConfigMap, backup.configSecret, backup.cron.
 //
 {
   local k = import 'k.libsonnet',
@@ -611,16 +616,22 @@
   // with restic, use restic.resticForApp(app, { ..., backupTargets: [{
   // volumeName: this.dataVolumeName, mountPath }], ... }) and pass the same
   // volumeName and mountPath.
+  // Add the volume directly to each workload (withVolumesMixin) so it is present
+  // regardless of evaluation order; do not add to this.volumes to avoid duplicate.
   withLocalDataMount(mountPath='/data', storageClass='local-path', size='10Gi'): {
     local this = self,
+    local dataVol = volume.fromPersistentVolumeClaim(this.dataVolumeName, this.dataVolumeName),
 
     mounts+: [
       volumeMount.new(this.dataVolumeName, mountPath),
     ],
 
-    volumes+: [
-      volume.fromPersistentVolumeClaim(this.dataVolumeName, this.dataVolumeName),
-    ],
+    deployment+:
+      deployment.spec.template.spec.withVolumesMixin([dataVol]),
+    statefulset+:
+      statefulset.spec.template.spec.withVolumesMixin([dataVol]),
+    daemonset+:
+      daemonset.spec.template.spec.withVolumesMixin([dataVol]),
 
     local dataPvc =
       pvc.new(this.dataVolumeName)
