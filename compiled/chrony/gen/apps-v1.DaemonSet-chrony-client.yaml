@@ -10,7 +10,7 @@ spec:
   template:
     metadata:
       annotations:
-        chrony_conf_hash: 2e8a0c2d1ed718793ca76b20fa56e05b
+        chrony_conf_hash: 042003e03cf1172e071f2b5dccf5fc4e
         container_hash: 063cac851f8a71d6e08ef855e5f9bd22
       labels:
         name: chrony-client

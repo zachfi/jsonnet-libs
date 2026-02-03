@@ -11,11 +11,14 @@
 
   local localtime_file = 'etclocaltime',
 
-  local image = 'zachfi/chrony:latest',
-
-  new(): {
+  // namespace: namespace for both client and server (used in client config to target the server).
+  // clusterDomain: Kubernetes cluster DNS domain (e.g. 'cluster.local'); used for in-cluster server address.
+  // serverName: name of the chrony server service (client config will use serverName.namespace.svc.clusterDomain).
+  // image: container image for chrony client and server (and gpsd when using withGPSDevice).
+  new(namespace='time', clusterDomain='cluster.local', serverName='chrony-server', image='zachfi/chrony:latest'): {
     local this = self,
 
+    image:: image,
     gpsDeviceVolumeName:: 'gps-device',
     chronyClientConfigVolumeName:: 'chrony-client-config',
     chronyServerConfigVolumeName:: 'chrony-server-config',
@@ -28,9 +31,10 @@
       'chrony.conf': this.serverConfig,
     },
 
-    // TODO: make this more configurable
+    local serverAddr = '%s.%s.svc.%s' % [serverName, namespace, clusterDomain],
+
     clientConfig:: |||
-      server chrony-server.time.svc.cluster.znet
+      server %(serverAddr)s
 
       server 0.us.pool.ntp.org
       server 1.us.pool.ntp.org
@@ -44,7 +48,7 @@
       rtcsync
       rtconutc
       allow
-    |||,
+    ||| % { serverAddr: serverAddr },
 
     serverConfig:: |||
       server 0.us.pool.ntp.org
@@ -63,7 +67,7 @@
     |||,
 
     client:
-      app.new('chrony-client', image, 'time')
+      app.new('chrony-client', image, namespace)
       + app.withDaemonSet()
       + app.withHostMount(localtime_file, '/etc/localtime')
       + app.withConfigmapMount('/etc/chrony.conf', clientData, 'chrony.conf')
@@ -88,7 +92,7 @@
 
 
     server:
-      app.new('chrony-server', image, 'time')
+      app.new('chrony-server', image, namespace)
       + app.withDeployment()
       + app.withHostMount(localtime_file, '/etc/localtime')
       + app.withConfigmapMount('/etc/chrony.conf', serverData, 'chrony.conf')
@@ -133,7 +137,7 @@
     local this = self,
 
     gpsdContainer::
-      container.new('gpsd', image)
+      container.new('gpsd', this.image)
       + container.withImagePullPolicy('Always')
       + container.withArgs([
         'gpsd',

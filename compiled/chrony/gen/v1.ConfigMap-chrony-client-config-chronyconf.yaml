@@ -1,7 +1,7 @@
 apiVersion: v1
 data:
   chrony.conf: |
-    server chrony-server.time.svc.cluster.znet
+    server chrony-server.time.svc.cluster.local
 
     server 0.us.pool.ntp.org
     server 1.us.pool.ntp.org

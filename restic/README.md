@@ -18,7 +18,7 @@ local ldap_backup_targets = [
   ldap: app.new('ldap', images.ldap, namespace='auth')
     + app.withStatefulSet()
     + app.withLocalDataMount('/bitnami/openldap', size='200Mi', ...)
-    + app.withCertificate(tld='cluster.znet', mountPath='/ldap/tls')
+    + app.withCertificate(tld='cluster.local', mountPath='/ldap/tls')  // or your cluster DNS domain
     + ...,
 
   ldap_backup: restic.resticForApp(self.ldap, {
