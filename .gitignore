@@ -1,2 +1,5 @@
 libs/*/skel/
 libs/*/config.yml
+
+# Compiled: out/ is local-only (jsonnetfile snapshot); only compiled/*/gen is committed.
+compiled/out/
