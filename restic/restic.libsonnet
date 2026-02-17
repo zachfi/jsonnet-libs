@@ -55,8 +55,8 @@
       // Backup.sh is extended by the withPVC() method.
       'backup.sh': |||
         #!/bin/bash
-        set -e
         RESTIC="restic -v"
+        $RESTIC snapshots || $RESTIC init
       ||| % this,
       'restore.sh': |||
         #!/bin/bash
@@ -224,13 +224,14 @@
 
     local repoURL = std.join('/', [bucketURL, namespace, name]),
 
-    containerEnv+: [
-      envVar.fromSecretRef('AWS_ACCESS_KEY_ID', secretRefName, secretKeys.accessKey),
-      envVar.fromSecretRef('AWS_SECRET_ACCESS_KEY', secretRefName, secretKeys.secretKey),
-      envVar.fromSecretRef('RESTIC_PASSWORD', secretRefName, secretKeys.resticPassword),
-      envVar.new('RESTIC_REPOSITORY', repoURL),
-    ]
-    + (if caCertPath != null then [envVar.new('RESTIC_CACERT', caCertPath)] else []),
+    containerEnv+:
+      [
+        envVar.fromSecretRef('AWS_ACCESS_KEY_ID', secretRefName, secretKeys.accessKey),
+        envVar.fromSecretRef('AWS_SECRET_ACCESS_KEY', secretRefName, secretKeys.secretKey),
+        envVar.fromSecretRef('RESTIC_PASSWORD', secretRefName, secretKeys.resticPassword),
+        envVar.new('RESTIC_REPOSITORY', repoURL),
+      ]
+      + (if caCertPath != null then [envVar.new('RESTIC_CACERT', caCertPath)] else []),
   },
 
   // A backup cronJob can be used for workloads which have a single instance.
@@ -298,14 +299,15 @@
     local resReqs = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'requests') then opts.resources.requests else {};
     local resLimits = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'limits') then opts.resources.limits else {};
     local ttl = if std.objectHas(opts, 'ttl') then opts.ttl else 86400;
-    local b = self.new(appName, namespace)
-      + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, appName, secretKeys=secretKeys, caCertPath=caCertPathVal)
-      + (if std.objectHas(opts, 'image') && opts.image != null then self.withImage(opts.image) else {})
-      + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
-    local b2 = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, b);
-    local b3 = if std.objectHas(opts, 'cert') && opts.cert != null then b2 + self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else b2;
-    local b4 = b3 + self.withBackupCron(opts.schedule, ttl) + self.withCronPodAffinity(matchLabels);
-    local b5 = if std.objectHas(opts, 'fsPermissions') && opts.fsPermissions != null then b4 + self.withFsPermissions(opts.fsPermissions.uid, opts.fsPermissions.gid) else b4;
-    local b6 = if std.objectHas(opts, 'nodeSelector') && opts.nodeSelector != {} then b5 + self.withNodeSelector(opts.nodeSelector) else b5;
-    b6
+    local base = self.new(appName, namespace)
+                 + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, appName, secretKeys=secretKeys, caCertPath=caCertPathVal)
+                 + (if std.objectHas(opts, 'image') && opts.image != null then self.withImage(opts.image) else {})
+                 + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
+    local withTargets = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, base);
+    withTargets
+    + (if std.objectHas(opts, 'cert') && opts.cert != null then self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else {})
+    + self.withBackupCron(opts.schedule, ttl)
+    + self.withCronPodAffinity(matchLabels)
+    + (if std.objectHas(opts, 'fsPermissions') && opts.fsPermissions != null then self.withFsPermissions(opts.fsPermissions.uid, opts.fsPermissions.gid) else {})
+    + (if std.objectHas(opts, 'nodeSelector') && opts.nodeSelector != {} then self.withNodeSelector(opts.nodeSelector) else {}),
 }
