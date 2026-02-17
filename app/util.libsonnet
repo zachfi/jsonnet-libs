@@ -252,6 +252,7 @@
       daemonset.spec.template.spec.withServiceAccountName(name),
   },
 
+  // tld: cluster DNS domain (e.g. 'cluster.local')
   withCertificate(issuer='vault-issuer', tld='cluster.local', altNames=[], mountPath='/tls'): {
     local this = self,
     local certVolume = volume.fromSecret(this.tlsVolumeName, this.tlsVolumeName),

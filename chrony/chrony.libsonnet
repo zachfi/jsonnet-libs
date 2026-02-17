@@ -12,7 +12,7 @@
   local localtime_file = 'etclocaltime',
 
   // namespace: namespace for both client and server (used in client config to target the server).
-  // clusterDomain: Kubernetes cluster DNS domain (e.g. 'cluster.local'); used for in-cluster server address.
+  // clusterDomain: Kubernetes cluster DNS domain; pass your domain (e.g. 'cluster.local'). Used for in-cluster server address.
   // serverName: name of the chrony server service (client config will use serverName.namespace.svc.clusterDomain).
   // image: container image for chrony client and server (and gpsd when using withGPSDevice).
   new(namespace='time', clusterDomain='cluster.local', serverName='chrony-server', image='zachfi/chrony:latest'): {

@@ -16,7 +16,7 @@ spec:
     metadata:
       annotations:
         config_hash: d304ec1cac3dd875a97821730303d1e2
-        container_hash: af0f9f5a36948df7d987910b4bde5b2d
+        container_hash: 2d495ef808b7384e9ba73f0b9acbe921
         secret.reloader.stakater.com/reload: ldap-tls
       labels:
         app: ldap
@@ -37,7 +37,7 @@ spec:
         - name: LDAP_SKIP_DEFAULT_TREE
           value: "yes"
         - name: LDAP_ROOT
-          value: dc=znet
+          value: dc=example,dc=com
         - name: LDAP_CUSTOM_LDIF_DIR
           value: /ldifs
         - name: LDAP_ENABLE_TLS
