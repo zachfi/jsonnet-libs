@@ -64,6 +64,8 @@
     // pv and pvc are used to create a persistent volume and claim.
     pv: [],
     pvc: [],
+    isStatefulSet:: false,
+    volumeClaimTemplates: [],
 
     // volumes and mounts are realized by the default workload objects.
     volumes:: [],
@@ -105,7 +107,7 @@
     statefulset::
       statefulset.new(appName, 1, this.container,)
       + statefulset.spec.withServiceName(appName)
-      + statefulset.spec.withVolumeClaimTemplates(this.pvc)
+      + statefulset.spec.withVolumeClaimTemplates(this.volumeClaimTemplates)
       + statefulset.spec.persistentVolumeClaimRetentionPolicy.withWhenDeleted('Retain')
       + statefulset.spec.updateStrategy.rollingUpdate.withMaxUnavailable(1)
       + statefulset.spec.template.metadata.withAnnotations(this.annotations)
@@ -641,7 +643,8 @@
       + pvc.spec.withStorageClassName(storageClass)
       + pvc.metadata.withLabels({ app: this.appName }),
 
-    pvc+: [dataPvc],
+    volumeClaimTemplates+: [dataPvc],
+    pvc+: if this.isStatefulSet then [] else [dataPvc],
   },
 
   withCharDevice(volumeName, mountPath, mount=true): {
@@ -682,6 +685,7 @@
   withStatefulSet(): {
     local this = self,
     workload: this.statefulset,
+    isStatefulSet:: true,
   },
 
   withDaemonSet(): {
