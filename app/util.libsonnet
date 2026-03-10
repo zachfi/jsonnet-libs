@@ -65,7 +65,7 @@
     pv: [],
     pvc: [],
     isStatefulSet:: false,
-    volumeClaimTemplates: [],
+    volumeClaimTemplates:: [],
 
     // volumes and mounts are realized by the default workload objects.
     volumes:: [],
@@ -643,7 +643,7 @@
       + pvc.spec.withStorageClassName(storageClass)
       + pvc.metadata.withLabels({ app: this.appName }),
 
-    volumeClaimTemplates+: [dataPvc],
+    volumeClaimTemplates+:: [dataPvc],
     pvc+: if this.isStatefulSet then [] else [dataPvc],
   },
 
