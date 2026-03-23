@@ -281,6 +281,37 @@
       + cronJob.spec.jobTemplate.spec.template.spec.securityContext.withRunAsUser(uid),
   },
 
+  // resticForPV builds a restic backup for a PVC directly — use when there is no
+  // app object (e.g. Helm-managed workloads, NFS-backed shared PVCs, or any case
+  // where the caller wants to supply name and namespace explicitly).
+  //
+  // name: used for the CronJob name and S3 repo path.
+  // namespace: Kubernetes namespace.
+  // opts: same as resticForApp opts except:
+  //   - backupTargets ([{ volumeName, mountPath }]) — required, same format as resticForApp
+  //   - matchLabels (optional {}): pod affinity to co-locate with the workload. Omit for
+  //     RWX / NFS PVCs that can be mounted from any node.
+  //   All other opts (bucketURL, secretRefName, secretKeys, schedule, ttl, image,
+  //   resources, caCertPath, cert, fsPermissions, nodeSelector) behave identically.
+  resticForPV(name, namespace, opts)::
+    local secretRefName = if std.objectHas(opts, 'secretRefName') then opts.secretRefName else '%s-restic-config' % name;
+    local secretKeys = if std.objectHas(opts, 'secretKeys') then opts.secretKeys else { accessKey: 'accessKey', secretKey: 'secretKey', resticPassword: 'resticPassword' };
+    local caCertPathVal = if std.objectHas(opts, 'caCertPath') then opts.caCertPath else null;
+    local resReqs = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'requests') then opts.resources.requests else {};
+    local resLimits = if std.objectHas(opts, 'resources') && opts.resources != null && std.objectHas(opts.resources, 'limits') then opts.resources.limits else {};
+    local ttl = if std.objectHas(opts, 'ttl') then opts.ttl else 86400;
+    local base = self.new(name, namespace)
+                 + self.withS3Bucket(secretRefName, opts.bucketURL, namespace, name, secretKeys=secretKeys, caCertPath=caCertPathVal)
+                 + (if std.objectHas(opts, 'image') && opts.image != null then self.withImage(opts.image) else {})
+                 + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
+    local withTargets = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, base);
+    withTargets
+    + (if std.objectHas(opts, 'cert') && opts.cert != null then self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else {})
+    + self.withBackupCron(opts.schedule, ttl)
+    + (if std.objectHas(opts, 'matchLabels') && opts.matchLabels != null then self.withCronPodAffinity(opts.matchLabels) else {})
+    + (if std.objectHas(opts, 'fsPermissions') && opts.fsPermissions != null then self.withFsPermissions(opts.fsPermissions.uid, opts.fsPermissions.gid) else {})
+    + (if std.objectHas(opts, 'nodeSelector') && opts.nodeSelector != {} then self.withNodeSelector(opts.nodeSelector) else {}),
+
   // resticForApp builds a restic backup from an app and opts. Use at top level:
   //   backup: restic.resticForApp(self.ldap, { bucketURL: ..., secretRefName: ..., backupTargets: [...], schedule: ..., cert: ... })
   // opts: bucketURL, secretRefName (optional, default '%s-restic-config' % appName), secretKeys (optional key mapping),
