@@ -779,6 +779,37 @@
       + (if std.length(limits) > 0 then container.resources.withLimits(limits) else {}),
   },
 
+  // withHttpProbe adds readiness and liveness HTTP GET probes to the main
+  // container. By default both probes use the same path and port; pass
+  // separate livenessPath/livenessPort to override the liveness target.
+  withHttpProbe(
+    path='/ready',
+    port='http',
+    initialDelaySeconds=10,
+    periodSeconds=10,
+    timeoutSeconds=5,
+    failureThreshold=3,
+    livenessPath=null,
+    livenessPort=null,
+  ): {
+    local lPath = if livenessPath != null then livenessPath else path,
+    local lPort = if livenessPort != null then livenessPort else port,
+
+    container+:
+      container.readinessProbe.httpGet.withPath(path)
+      + container.readinessProbe.httpGet.withPort(port)
+      + container.readinessProbe.withInitialDelaySeconds(initialDelaySeconds)
+      + container.readinessProbe.withPeriodSeconds(periodSeconds)
+      + container.readinessProbe.withTimeoutSeconds(timeoutSeconds)
+      + container.readinessProbe.withFailureThreshold(failureThreshold)
+      + container.livenessProbe.httpGet.withPath(lPath)
+      + container.livenessProbe.httpGet.withPort(lPort)
+      + container.livenessProbe.withInitialDelaySeconds(initialDelaySeconds)
+      + container.livenessProbe.withPeriodSeconds(periodSeconds)
+      + container.livenessProbe.withTimeoutSeconds(timeoutSeconds)
+      + container.livenessProbe.withFailureThreshold(failureThreshold),
+  },
+
   withNfs(nfsServer, nfsPath, mountVolume, mountPath): {
     local volumeName = '%s-%s' % [self.appName, mountVolume],
 
