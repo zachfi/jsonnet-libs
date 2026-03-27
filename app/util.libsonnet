@@ -481,10 +481,10 @@
     minReplicas=1,
     containerPolicies=null,
     controlledResources=['cpu', 'memory'],
-    minCpu=null,
-    maxCpu=null,
-    minMemory=null,
-    maxMemory=null,
+    minCpu='50m',
+    maxCpu='2',
+    minMemory='64Mi',
+    maxMemory='2Gi',
   ): {
     local this = self,
 
