@@ -86,7 +86,7 @@
       service.new(appName, this.workload.spec.selector.matchLabels, this.svcPorts)
       + service.metadata.withLabels({ name: appName })
       + service.spec.withIpFamilyPolicy('RequireDualStack')
-      + service.spec.withIpFamilies(['IPv6', 'IPv4'])
+      + service.spec.withIpFamilies(['IPv4', 'IPv6'])
     ,
 
     annotations:: {
