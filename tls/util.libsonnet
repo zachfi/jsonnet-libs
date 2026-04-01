@@ -59,7 +59,7 @@
     },
   },
 
-  newVaultIssuer(server, path, caBundle, tokenSecretRefName='cert-manager-vault-token'): {
+  newVaultIssuer(server, path, caBundle, serviceAccountName=null, kubernetesRole=null, tokenSecretRefName='cert-manager-vault-token'): {
     vault_issuer: {
       apiVersion: 'cert-manager.io/v1',
       kind: 'ClusterIssuer',
@@ -71,12 +71,21 @@
           path: path,
           server: server,
           caBundle: caBundle,
-          auth: {
-            tokenSecretRef: {
-              name: tokenSecretRefName,
-              key: 'VAULT_TOKEN',
+          auth:
+            if serviceAccountName != null && kubernetesRole != null then {
+              kubernetes: {
+                mountPath: '/v1/auth/kubernetes',
+                role: kubernetesRole,
+                serviceAccountRef: {
+                  name: serviceAccountName,
+                },
+              },
+            } else {
+              tokenSecretRef: {
+                name: tokenSecretRefName,
+                key: 'VAULT_TOKEN',
+              },
             },
-          },
         },
       },
     },
