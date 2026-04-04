@@ -1,5 +1,5 @@
 ---
-permalink: /0.5.4/common/v1/configSet/
+permalink: /0.6.4/common/v1/configSet/
 ---
 
 # common.v1.configSet
@@ -48,6 +48,7 @@ permalink: /0.5.4/common/v1/configSet/
     * [`fn withConfigMapRefs(configMapRefs)`](#fn-specfileswithconfigmaprefs)
     * [`fn withConfigMapRefsMixin(configMapRefs)`](#fn-specfileswithconfigmaprefsmixin)
     * [`fn withContent(content)`](#fn-specfileswithcontent)
+    * [`fn withCreateOnly(createOnly)`](#fn-specfileswithcreateonly)
     * [`fn withEnsure(ensure)`](#fn-specfileswithensure)
     * [`fn withGroup(group)`](#fn-specfileswithgroup)
     * [`fn withMode(mode)`](#fn-specfileswithmode)
@@ -60,13 +61,16 @@ permalink: /0.5.4/common/v1/configSet/
   * [`obj spec.packages`](#obj-specpackages)
     * [`fn withEnsure(ensure)`](#fn-specpackageswithensure)
     * [`fn withName(name)`](#fn-specpackageswithname)
+    * [`fn withVersion(version)`](#fn-specpackageswithversion)
   * [`obj spec.services`](#obj-specservices)
     * [`fn withArguments(arguments)`](#fn-specserviceswitharguments)
     * [`fn withEnable(enable)`](#fn-specserviceswithenable)
     * [`fn withEnsure(ensure)`](#fn-specserviceswithensure)
+    * [`fn withLock_group(lock_group)`](#fn-specserviceswithlock_group)
     * [`fn withName(name)`](#fn-specserviceswithname)
     * [`fn withSubscribe_files(subscribe_files)`](#fn-specserviceswithsubscribe_files)
     * [`fn withSubscribe_filesMixin(subscribe_files)`](#fn-specserviceswithsubscribe_filesmixin)
+    * [`fn withUser(user)`](#fn-specserviceswithuser)
 
 ## Fields
 
@@ -396,6 +400,14 @@ withContent(content)
 
 
 
+### fn spec.files.withCreateOnly
+
+```ts
+withCreateOnly(createOnly)
+```
+
+"CreateOnly skips writing the file if it already exists on disk.\nUseful for seed/skeleton files (e.g. ~/.zshrc) that nodemanager should\ncreate on first boot but never overwrite afterward."
+
 ### fn spec.files.withEnsure
 
 ```ts
@@ -490,6 +502,14 @@ withName(name)
 
 
 
+### fn spec.packages.withVersion
+
+```ts
+withVersion(version)
+```
+
+
+
 ## obj spec.services
 
 
@@ -514,6 +534,14 @@ withEnable(enable)
 
 ```ts
 withEnsure(ensure)
+```
+
+
+
+### fn spec.services.withLock_group
+
+```ts
+withLock_group(lock_group)
 ```
 
 
@@ -543,3 +571,10 @@ withSubscribe_filesMixin(subscribe_files)
 
 
 **Note:** This function appends passed data to existing values
+
+### fn spec.services.withUser
+
+```ts
+withUser(user)
+```
+

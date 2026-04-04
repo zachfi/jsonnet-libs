@@ -1,5 +1,5 @@
 ---
-permalink: /0.5.4/common/v1/managedNode/
+permalink: /0.6.4/common/v1/managedNode/
 ---
 
 # common.v1.managedNode
@@ -35,6 +35,9 @@ permalink: /0.5.4/common/v1/managedNode/
     * [`fn withDelay(delay)`](#fn-specupgradewithdelay)
     * [`fn withGroup(group)`](#fn-specupgradewithgroup)
     * [`fn withSchedule(schedule)`](#fn-specupgradewithschedule)
+  * [`obj spec.wireGuard`](#obj-specwireguard)
+    * [`fn withEnabled(enabled)`](#fn-specwireguardwithenabled)
+    * [`fn withInterface(interface)`](#fn-specwireguardwithinterface)
 
 ## Fields
 
@@ -240,7 +243,7 @@ withDelay(delay)
 withGroup(group)
 ```
 
-"TODO: move group to the label.  This makes querying easier since we can\nfilter on label, and we can't filter on a field in the spec."
+"filter on label, and we can't filter on a field in the spec."
 
 ### fn spec.upgrade.withSchedule
 
@@ -248,3 +251,24 @@ withGroup(group)
 withSchedule(schedule)
 ```
 
+
+
+## obj spec.wireGuard
+
+"WireGuardSpec controls optional WireGuard key bootstrapping for this node.\nWhen Enabled is true, the controller generates a Curve25519 keypair on first\nreconcile and stores it in a Secret named wg-<Interface>-<nodeName>.  The\npublic key is published to status.wireGuard so other nodes can build peer\nconfigs from template data before the interface is configured."
+
+### fn spec.wireGuard.withEnabled
+
+```ts
+withEnabled(enabled)
+```
+
+"Enabled turns on key bootstrapping for this node."
+
+### fn spec.wireGuard.withInterface
+
+```ts
+withInterface(interface)
+```
+
+"Interface is the WireGuard interface name to bootstrap.  Defaults to wg0."

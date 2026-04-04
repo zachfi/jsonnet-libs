@@ -11,6 +11,8 @@ if [ "$CI" != "true" ]; then
   OPTS="$OPTS --user $(id -u):$(id -g)"
   OPTS="$OPTS -v /etc/passwd:/etc/passwd:ro"
   OPTS="$OPTS -v /etc/group:/etc/group:ro"
+  # Bridge networking is broken on newer kernels; use host network locally.
+  OPTS="$OPTS --network=host"
 fi
 
 if [ "$DEBUG" == "true" ]; then

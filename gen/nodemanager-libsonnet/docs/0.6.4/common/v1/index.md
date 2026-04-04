@@ -1,5 +1,5 @@
 ---
-permalink: /0.5.4/common/v1/
+permalink: /0.6.4/common/v1/
 ---
 
 # common.v1
