@@ -1,10 +1,10 @@
 ---
-permalink: /0.5.21/common/v1/managedNode/
+permalink: /0.6.5/common/v1/configSet/
 ---
 
-# common.v1.managedNode
+# common.v1.configSet
 
-"ManagedNode is the Schema for the managednodes API"
+"ConfigSet is the Schema for the configsets API"
 
 ## Index
 
@@ -30,11 +30,47 @@ permalink: /0.5.21/common/v1/managedNode/
   * [`fn withSelfLink(selfLink)`](#fn-metadatawithselflink)
   * [`fn withUid(uid)`](#fn-metadatawithuid)
 * [`obj spec`](#obj-spec)
-  * [`fn withDomain(domain)`](#fn-specwithdomain)
-  * [`obj spec.upgrade`](#obj-specupgrade)
-    * [`fn withDelay(delay)`](#fn-specupgradewithdelay)
-    * [`fn withGroup(group)`](#fn-specupgradewithgroup)
-    * [`fn withSchedule(schedule)`](#fn-specupgradewithschedule)
+  * [`fn withExecutions(executions)`](#fn-specwithexecutions)
+  * [`fn withExecutionsMixin(executions)`](#fn-specwithexecutionsmixin)
+  * [`fn withFiles(files)`](#fn-specwithfiles)
+  * [`fn withFilesMixin(files)`](#fn-specwithfilesmixin)
+  * [`fn withPackages(packages)`](#fn-specwithpackages)
+  * [`fn withPackagesMixin(packages)`](#fn-specwithpackagesmixin)
+  * [`fn withServices(services)`](#fn-specwithservices)
+  * [`fn withServicesMixin(services)`](#fn-specwithservicesmixin)
+  * [`obj spec.executions`](#obj-specexecutions)
+    * [`fn withArgs(args)`](#fn-specexecutionswithargs)
+    * [`fn withArgsMixin(args)`](#fn-specexecutionswithargsmixin)
+    * [`fn withCommand(command)`](#fn-specexecutionswithcommand)
+    * [`fn withSubscribe_files(subscribe_files)`](#fn-specexecutionswithsubscribe_files)
+    * [`fn withSubscribe_filesMixin(subscribe_files)`](#fn-specexecutionswithsubscribe_filesmixin)
+  * [`obj spec.files`](#obj-specfiles)
+    * [`fn withConfigMapRefs(configMapRefs)`](#fn-specfileswithconfigmaprefs)
+    * [`fn withConfigMapRefsMixin(configMapRefs)`](#fn-specfileswithconfigmaprefsmixin)
+    * [`fn withContent(content)`](#fn-specfileswithcontent)
+    * [`fn withCreateOnly(createOnly)`](#fn-specfileswithcreateonly)
+    * [`fn withEnsure(ensure)`](#fn-specfileswithensure)
+    * [`fn withGroup(group)`](#fn-specfileswithgroup)
+    * [`fn withMode(mode)`](#fn-specfileswithmode)
+    * [`fn withOwner(owner)`](#fn-specfileswithowner)
+    * [`fn withPath(path)`](#fn-specfileswithpath)
+    * [`fn withSecretRefs(secretRefs)`](#fn-specfileswithsecretrefs)
+    * [`fn withSecretRefsMixin(secretRefs)`](#fn-specfileswithsecretrefsmixin)
+    * [`fn withTarget(target)`](#fn-specfileswithtarget)
+    * [`fn withTemplate(template)`](#fn-specfileswithtemplate)
+  * [`obj spec.packages`](#obj-specpackages)
+    * [`fn withEnsure(ensure)`](#fn-specpackageswithensure)
+    * [`fn withName(name)`](#fn-specpackageswithname)
+    * [`fn withVersion(version)`](#fn-specpackageswithversion)
+  * [`obj spec.services`](#obj-specservices)
+    * [`fn withArguments(arguments)`](#fn-specserviceswitharguments)
+    * [`fn withEnable(enable)`](#fn-specserviceswithenable)
+    * [`fn withEnsure(ensure)`](#fn-specserviceswithensure)
+    * [`fn withLock_group(lock_group)`](#fn-specserviceswithlock_group)
+    * [`fn withName(name)`](#fn-specserviceswithname)
+    * [`fn withSubscribe_files(subscribe_files)`](#fn-specserviceswithsubscribe_files)
+    * [`fn withSubscribe_filesMixin(subscribe_files)`](#fn-specserviceswithsubscribe_filesmixin)
+    * [`fn withUser(user)`](#fn-specserviceswithuser)
 
 ## Fields
 
@@ -44,7 +80,7 @@ permalink: /0.5.21/common/v1/managedNode/
 new(name)
 ```
 
-new returns an instance of ManagedNode
+new returns an instance of ConfigSet
 
 ## obj metadata
 
@@ -212,39 +248,333 @@ withUid(uid)
 
 ## obj spec
 
-"ManagedNodeSpec defines the desired state of ManagedNode"
+"ConfigSetSpec defines the desired state of ConfigSet"
 
-### fn spec.withDomain
+### fn spec.withExecutions
 
 ```ts
-withDomain(domain)
+withExecutions(executions)
 ```
 
 
 
-## obj spec.upgrade
-
-
-
-### fn spec.upgrade.withDelay
+### fn spec.withExecutionsMixin
 
 ```ts
-withDelay(delay)
+withExecutionsMixin(executions)
 ```
 
 
 
-### fn spec.upgrade.withGroup
+**Note:** This function appends passed data to existing values
+
+### fn spec.withFiles
+
+```ts
+withFiles(files)
+```
+
+
+
+### fn spec.withFilesMixin
+
+```ts
+withFilesMixin(files)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.withPackages
+
+```ts
+withPackages(packages)
+```
+
+
+
+### fn spec.withPackagesMixin
+
+```ts
+withPackagesMixin(packages)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.withServices
+
+```ts
+withServices(services)
+```
+
+
+
+### fn spec.withServicesMixin
+
+```ts
+withServicesMixin(services)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+## obj spec.executions
+
+
+
+### fn spec.executions.withArgs
+
+```ts
+withArgs(args)
+```
+
+
+
+### fn spec.executions.withArgsMixin
+
+```ts
+withArgsMixin(args)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.executions.withCommand
+
+```ts
+withCommand(command)
+```
+
+
+
+### fn spec.executions.withSubscribe_files
+
+```ts
+withSubscribe_files(subscribe_files)
+```
+
+
+
+### fn spec.executions.withSubscribe_filesMixin
+
+```ts
+withSubscribe_filesMixin(subscribe_files)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+## obj spec.files
+
+
+
+### fn spec.files.withConfigMapRefs
+
+```ts
+withConfigMapRefs(configMapRefs)
+```
+
+
+
+### fn spec.files.withConfigMapRefsMixin
+
+```ts
+withConfigMapRefsMixin(configMapRefs)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.files.withContent
+
+```ts
+withContent(content)
+```
+
+
+
+### fn spec.files.withCreateOnly
+
+```ts
+withCreateOnly(createOnly)
+```
+
+"CreateOnly skips writing the file if it already exists on disk.\nUseful for seed/skeleton files (e.g. ~/.zshrc) that nodemanager should\ncreate on first boot but never overwrite afterward."
+
+### fn spec.files.withEnsure
+
+```ts
+withEnsure(ensure)
+```
+
+
+
+### fn spec.files.withGroup
 
 ```ts
 withGroup(group)
 ```
 
-"filter on label, and we can't filter on a field in the spec."
 
-### fn spec.upgrade.withSchedule
+
+### fn spec.files.withMode
 
 ```ts
-withSchedule(schedule)
+withMode(mode)
+```
+
+
+
+### fn spec.files.withOwner
+
+```ts
+withOwner(owner)
+```
+
+
+
+### fn spec.files.withPath
+
+```ts
+withPath(path)
+```
+
+
+
+### fn spec.files.withSecretRefs
+
+```ts
+withSecretRefs(secretRefs)
+```
+
+
+
+### fn spec.files.withSecretRefsMixin
+
+```ts
+withSecretRefsMixin(secretRefs)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.files.withTarget
+
+```ts
+withTarget(target)
+```
+
+
+
+### fn spec.files.withTemplate
+
+```ts
+withTemplate(template)
+```
+
+
+
+## obj spec.packages
+
+
+
+### fn spec.packages.withEnsure
+
+```ts
+withEnsure(ensure)
+```
+
+
+
+### fn spec.packages.withName
+
+```ts
+withName(name)
+```
+
+
+
+### fn spec.packages.withVersion
+
+```ts
+withVersion(version)
+```
+
+
+
+## obj spec.services
+
+
+
+### fn spec.services.withArguments
+
+```ts
+withArguments(arguments)
+```
+
+
+
+### fn spec.services.withEnable
+
+```ts
+withEnable(enable)
+```
+
+
+
+### fn spec.services.withEnsure
+
+```ts
+withEnsure(ensure)
+```
+
+
+
+### fn spec.services.withLock_group
+
+```ts
+withLock_group(lock_group)
+```
+
+
+
+### fn spec.services.withName
+
+```ts
+withName(name)
+```
+
+
+
+### fn spec.services.withSubscribe_files
+
+```ts
+withSubscribe_files(subscribe_files)
+```
+
+
+
+### fn spec.services.withSubscribe_filesMixin
+
+```ts
+withSubscribe_filesMixin(subscribe_files)
+```
+
+
+
+**Note:** This function appends passed data to existing values
+
+### fn spec.services.withUser
+
+```ts
+withUser(user)
 ```
 

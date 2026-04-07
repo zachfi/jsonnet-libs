@@ -1,5 +1,5 @@
 ---
-permalink: /0.6.4/common/
+permalink: /0.6.5/common/
 ---
 
 # common

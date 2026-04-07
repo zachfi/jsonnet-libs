@@ -1,5 +1,5 @@
 ---
-permalink: /0.6.4/common/v1/managedNode/
+permalink: /0.6.5/common/v1/managedNode/
 ---
 
 # common.v1.managedNode
