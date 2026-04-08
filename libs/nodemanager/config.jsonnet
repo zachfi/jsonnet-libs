@@ -1,8 +1,8 @@
 local config = import 'jsonnet/config.jsonnet';
 
 local versions = [
-  '0.6.4',
-  '0.5.21',
+  '0.6.6',
+  '0.6.5',
 ];
 
 // The files in new versions were moved here:
