@@ -1,6 +1,7 @@
 local config = import 'jsonnet/config.jsonnet';
 
 local versions = [
+  '0.7.0',
   '0.6.9',
   '0.6.8',
   '0.6.7',
@@ -14,6 +15,7 @@ local path = 'https://raw.githubusercontent.com/zachfi/nodemanager/v%s/config/cr
 local crds = [
   'common.nodemanager_configsets.yaml',
   'common.nodemanager_managednodes.yaml',
+  'freebsd.nodemanager_jails.yaml',
 ];
 
 config.new(
