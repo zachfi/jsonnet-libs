@@ -12,10 +12,10 @@
       "separator": "[\\s\\-\\.]+"
   - "minify":
       "minify_html": true
-"repo_name": "https://nodemanager-libsonnet"
-"repo_url": "https://nodemanager-libsonnet"
+"repo_name": "zachfi/jsonnet-libs"
+"repo_url": "https://github.com/zachfi/jsonnet-libs"
 "site_name": "nodemanager-libsonnet jsonnet library"
-"site_url": "https://jsonnet-libs.github.io/nodemanager-libsonnet-libsonnet"
+"site_url": "https://zachfi.github.io/jsonnet-libs/nodemanager-libsonnet"
 "theme":
   "features":
     - "navigation.tabs"

@@ -1,0 +1,77 @@
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gen/*/docs/**"
+      - "gen/*/mkdocs.yml"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install mkdocs-material and plugins
+        run: pip install mkdocs-material pymdown-extensions mdx_truly_sane_lists mkdocs-minify-plugin
+
+      - name: Build nodemanager-libsonnet docs
+        run: mkdocs build -f gen/nodemanager-libsonnet/mkdocs.yml -d ../../_site/nodemanager-libsonnet
+
+      - name: Build iotcontroller-libsonnet docs
+        run: mkdocs build -f gen/iotcontroller-libsonnet/mkdocs.yml -d ../../_site/iotcontroller-libsonnet
+
+      - name: Create landing page
+        run: |
+          cat > _site/index.html <<'LANDING'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>jsonnet-libs</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 4em auto; padding: 0 1em; }
+              a { color: #3f51b5; }
+              li { margin: 0.5em 0; }
+            </style>
+          </head>
+          <body>
+            <h1>jsonnet-libs</h1>
+            <p>Generated Jsonnet library documentation.</p>
+            <ul>
+              <li><a href="nodemanager-libsonnet/">nodemanager-libsonnet</a></li>
+              <li><a href="iotcontroller-libsonnet/">iotcontroller-libsonnet</a></li>
+            </ul>
+          </body>
+          </html>
+          LANDING
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
