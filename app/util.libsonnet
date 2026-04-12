@@ -40,6 +40,8 @@
   local volume = k.core.v1.volume,
   local volumeMount = k.core.v1.volumeMount,
 
+  local podDNSConfigOption = k.core.v1.podDNSConfigOption,
+
   local tls = import 'github.com/zachfi/jsonnet-libs/tls/util.libsonnet',
   local vpa = import 'github.com/jsonnet-libs/vertical-pod-autoscaler-libsonnet/1.0.0/main.libsonnet',
   local verticalPodAutoscaler = vpa.autoscaling.v1.verticalPodAutoscaler,
@@ -151,6 +153,22 @@
 
     cronJob+:
       cronJob.spec.jobTemplate.spec.template.spec.withNodeSelector(hsh),
+  },
+
+  withDnsConfig(ndots='1'): {
+    local options = [podDNSConfigOption.withName('ndots') + podDNSConfigOption.withValue(ndots)],
+
+    deployment+:
+      deployment.spec.template.spec.dnsConfig.withOptions(options),
+
+    statefulset+:
+      statefulset.spec.template.spec.dnsConfig.withOptions(options),
+
+    daemonset+:
+      daemonset.spec.template.spec.dnsConfig.withOptions(options),
+
+    cronJob+:
+      cronJob.spec.jobTemplate.spec.template.spec.dnsConfig.withOptions(options),
   },
 
   withTerminationGracePeriodSeconds(seconds): {
