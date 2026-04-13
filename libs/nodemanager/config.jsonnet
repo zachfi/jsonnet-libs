@@ -2,26 +2,6 @@ local config = import 'jsonnet/config.jsonnet';
 
 local versions = [
   '0.8.0',
-  '0.7.14',
-  '0.7.13',
-  '0.7.12',
-  '0.7.11',
-  '0.7.10',
-  '0.7.9',
-  '0.7.8',
-  '0.7.7',
-  '0.7.6',
-  '0.7.5',
-  '0.7.4',
-  '0.7.3',
-  '0.7.2',
-  '0.7.1',
-  '0.7.0',
-  '0.6.9',
-  '0.6.8',
-  '0.6.7',
-  '0.6.6',
-  '0.6.5',
 ];
 
 // The files in new versions were moved here:
@@ -31,6 +11,7 @@ local crds = [
   'common.nodemanager_configsets.yaml',
   'common.nodemanager_managednodes.yaml',
   'freebsd.nodemanager_jails.yaml',
+  'freebsd.nodemanager_jailtemplates.yaml',
 ];
 
 config.new(
