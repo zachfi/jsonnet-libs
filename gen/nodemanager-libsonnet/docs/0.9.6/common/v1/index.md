@@ -1,0 +1,10 @@
+---
+permalink: /0.9.6/common/v1/
+---
+
+# common.v1
+
+
+
+* [configSet](configSet.md)
+* [managedNode](managedNode.md)

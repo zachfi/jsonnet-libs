@@ -20,6 +20,9 @@ local crds = [
   'common.nodemanager_managednodes.yaml',
   'freebsd.nodemanager_jails.yaml',
   'freebsd.nodemanager_jailtemplates.yaml',
+  'freebsd.nodemanager_poudrierebulks.yaml',
+  'freebsd.nodemanager_poudrierejails.yaml',
+  'freebsd.nodemanager_poudriereports.yaml',
 ];
 
 config.new(
