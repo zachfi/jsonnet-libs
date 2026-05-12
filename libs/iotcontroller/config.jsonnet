@@ -23,11 +23,17 @@ local baseCrds = [
 // kubectl apply -f for those fields since v0.4.8; this regen lets
 // deployment_tools tk apply produce a strict-decoding-safe manifest
 // without the workaround.
+//
+// v0.5.0 lands the unified-evaluator Stage 4 first PR: the eval-loop
+// schema additions on the Condition CRD (Remediation.active_compute,
+// Remediation.active_compute_args, TimeIntervalSpec.sun_relative with
+// the SunWindow type). The Binding CRD is unchanged from v0.4.11.
 local versionCrds = {
   '0.1.0': baseCrds,
   '0.2.0': baseCrds,
   '0.4.0': baseCrds + ['iot.iot_bindings.yaml'],
   '0.4.11': baseCrds + ['iot.iot_bindings.yaml'],
+  '0.5.0': baseCrds + ['iot.iot_bindings.yaml'],
 };
 
 local path = 'https://raw.githubusercontent.com/zachfi/iotcontroller/v%s/config/crd/bases/';
