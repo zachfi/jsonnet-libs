@@ -12,10 +12,10 @@
       "separator": "[\\s\\-\\.]+"
   - "minify":
       "minify_html": true
-"repo_name": "zachfi/jsonnet-libs"
-"repo_url": "https://github.com/zachfi/jsonnet-libs"
+"repo_name": "https://iotcontroller-libsonnet"
+"repo_url": "https://iotcontroller-libsonnet"
 "site_name": "iotcontroller-libsonnet jsonnet library"
-"site_url": "https://zachfi.github.io/jsonnet-libs/iotcontroller-libsonnet"
+"site_url": "https://jsonnet-libs.github.io/iotcontroller-libsonnet-libsonnet"
 "theme":
   "features":
     - "navigation.tabs"

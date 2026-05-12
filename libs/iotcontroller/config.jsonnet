@@ -15,10 +15,19 @@ local baseCrds = [
 // v0.4.0 introduces the Binding CRD with the Event trigger
 // (replaces the v0.3.x ZCL/MQTT triggers, which never made it into
 // any released libsonnet wrapper).
+//
+// v0.4.11 carries the schema additions that landed during the Stage
+// 1/2/3 work on the unified-evaluator plan: Binding.spec.event.values
+// (cross-device action vocabularies), Remediation.active_brightness_delta
+// (relative brightness adjust). The cluster had been hand-patched with
+// kubectl apply -f for those fields since v0.4.8; this regen lets
+// deployment_tools tk apply produce a strict-decoding-safe manifest
+// without the workaround.
 local versionCrds = {
   '0.1.0': baseCrds,
   '0.2.0': baseCrds,
   '0.4.0': baseCrds + ['iot.iot_bindings.yaml'],
+  '0.4.11': baseCrds + ['iot.iot_bindings.yaml'],
 };
 
 local path = 'https://raw.githubusercontent.com/zachfi/iotcontroller/v%s/config/crd/bases/';
