@@ -1,6 +1,7 @@
 local config = import 'jsonnet/config.jsonnet';
 
 local versions = [
+  '0.18.1',
   '0.17.0',
   '0.16.4',
   '0.15.1',
