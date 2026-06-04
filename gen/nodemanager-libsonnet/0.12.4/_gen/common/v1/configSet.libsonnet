@@ -88,6 +88,8 @@
       withSecretRefs(secretRefs): { secretRefs: if std.isArray(v=secretRefs) then secretRefs else [secretRefs] },
       '#withSecretRefsMixin':: d.fn(help='\n\n**Note:** This function appends passed data to existing values', args=[d.arg(name='secretRefs', type=d.T.array)]),
       withSecretRefsMixin(secretRefs): { secretRefs+: if std.isArray(v=secretRefs) then secretRefs else [secretRefs] },
+      '#withSourceFile':: d.fn(help="\"SourceFile is a path to a file on disk whose bytes are used as the file\\ncontent instead of Content or Template. In offline apply mode the path is\\nresolved relative to the manifest directory; in cluster-connected mode it\\nmust be absolute or reachable from the controller's working directory.\\nIf the path ends with \\\".tmpl\\\" the content is treated as a gomplate\\ntemplate, identical to setting Template directly.\"", args=[d.arg(name='sourceFile', type=d.T.string)]),
+      withSourceFile(sourceFile): { sourceFile: sourceFile },
       '#withTarget':: d.fn(help='', args=[d.arg(name='target', type=d.T.string)]),
       withTarget(target): { target: target },
       '#withTemplate':: d.fn(help='', args=[d.arg(name='template', type=d.T.string)]),
