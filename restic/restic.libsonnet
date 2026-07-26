@@ -52,9 +52,14 @@
         RESTIC="restic -v"
         $RESTIC snapshots || $RESTIC init
       ||| % this,
-      // Backup.sh is extended by the withPVC() method.
+      // Backup.sh is extended by withPVC() (adds `backup <path>`) and
+      // withRetention() (adds `forget --prune`). `set -e` is essential: it
+      // aborts before forget/prune if the backup fails, and propagates the
+      // non-zero exit so the CronJob fails and ResticAppBackupStale fires
+      // (otherwise a later successful prune would mask a failed backup).
       'backup.sh': |||
         #!/bin/bash
+        set -e
         RESTIC="restic -v"
         $RESTIC snapshots || $RESTIC init
       ||| % this,
@@ -96,6 +101,10 @@
       + (if namespace != '' then cronJob.metadata.withNamespace(namespace) else {})
       + cronJob.spec.withConcurrencyPolicy('Forbid')
       + cronJob.spec.jobTemplate.spec.withBackoffLimit(1)
+      // Stable pod hostname => stable restic snapshot host. Without this the
+      // host defaults to the (unique-per-run) pod name, which breaks parent
+      // detection (every backup re-reads everything) and forget grouping.
+      + cronJob.spec.jobTemplate.spec.template.spec.withHostname(appName)
       + cronJob.spec.jobTemplate.spec.template.spec.withNodeSelector(this.nodeSelector)
       + cronJob.spec.jobTemplate.spec.template.spec.withContainers(
         this.resticContainer
@@ -139,6 +148,25 @@
     volumes+: [
       volume.fromPersistentVolumeClaim(volumeName, volumeName),
     ],
+  },
+
+  // withRetention appends a forget+prune to backup.sh so snapshots do not
+  // accumulate unbounded (the default is a rolling ~27-snapshot window). It
+  // must run AFTER withPVC's backup line and relies on backup.sh's `set -e`
+  // so it is skipped when the backup itself fails. Applied by default in
+  // resticForApp/resticForPV; override the policy via opts.retention.
+  // --group-by paths is essential: restic's default forget grouping is by
+  // (host, paths), and the CronJob pod's host is its pod name (unique per run),
+  // so host-grouping keeps every snapshot (1 per group) and retention is a
+  // no-op. Grouping by paths alone (each app has its own repo) applies the
+  // policy across all snapshots regardless of host. Pair with the stable
+  // pod hostname set in new() so backups are also incremental (parent found).
+  withRetention(keep='--keep-daily 7 --keep-weekly 8 --keep-monthly 12'):: {
+    configData+: {
+      'backup.sh'+: |||
+        $RESTIC forget --group-by paths %s --prune
+      ||| % keep,
+    },
   },
 
   // withCertificate creates a TLS certificate for restic, used to validate
@@ -306,6 +334,7 @@
                  + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
     local withTargets = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, base);
     withTargets
+    + self.withRetention(if std.objectHas(opts, 'retention') && opts.retention != null then opts.retention else '--keep-daily 7 --keep-weekly 8 --keep-monthly 12')
     + (if std.objectHas(opts, 'cert') && opts.cert != null then self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else {})
     + self.withBackupCron(opts.schedule, ttl)
     + (if std.objectHas(opts, 'matchLabels') && opts.matchLabels != null then self.withCronPodAffinity(opts.matchLabels) else {})
@@ -323,7 +352,13 @@
   resticForApp(app, opts)::
     local appName = app.appName;
     local namespace = app.app.namespace;
-    local matchLabels = app.workload.spec.selector.matchLabels;
+    // Default: co-locate the backup with the workload's pods. For a StatefulSet
+    // whose backup targets one replica's RWO claimTemplate PVC (e.g.
+    // <sts>-data-<sts>-0), the app selector matches ALL replicas, so the backup
+    // pod can land on a node where that volume is not and Multi-Attach. Pass
+    // opts.matchLabels: { 'statefulset.kubernetes.io/pod-name': '<sts>-0' } to
+    // pin it to the replica that holds the target volume.
+    local matchLabels = if std.objectHas(opts, 'matchLabels') && opts.matchLabels != null then opts.matchLabels else app.workload.spec.selector.matchLabels;
     local secretRefName = if std.objectHas(opts, 'secretRefName') then opts.secretRefName else '%s-restic-config' % appName;
     local secretKeys = if std.objectHas(opts, 'secretKeys') then opts.secretKeys else { accessKey: 'accessKey', secretKey: 'secretKey', resticPassword: 'resticPassword' };
     local caCertPathVal = if std.objectHas(opts, 'caCertPath') then opts.caCertPath else null;
@@ -336,6 +371,7 @@
                  + (if std.objectHas(opts, 'resources') && opts.resources != null && opts.resources != {} then self.withResticResources(resReqs, resLimits) else {});
     local withTargets = std.foldr(function(t, acc) acc + self.withPVC(t.volumeName, t.mountPath), opts.backupTargets, base);
     withTargets
+    + self.withRetention(if std.objectHas(opts, 'retention') && opts.retention != null then opts.retention else '--keep-daily 7 --keep-weekly 8 --keep-monthly 12')
     + (if std.objectHas(opts, 'cert') && opts.cert != null then self.withVolumeMount(opts.cert.volumeName, opts.cert.mountPath) + self.withVolume(volume.fromSecret(opts.cert.volumeName, opts.cert.volumeName)) + self.withResticCacert(opts.cert.mountPath + '/ca.crt') else {})
     + self.withBackupCron(opts.schedule, ttl)
     + self.withCronPodAffinity(matchLabels)
