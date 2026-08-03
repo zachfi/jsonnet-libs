@@ -57,11 +57,20 @@
       // aborts before forget/prune if the backup fails, and propagates the
       // non-zero exit so the CronJob fails and ResticAppBackupStale fires
       // (otherwise a later successful prune would mask a failed backup).
+      //
+      // `unlock` before the backup is what keeps the repo self-healing. A pod
+      // that is SIGKILLed (node reboot, eviction, OOM) never releases its
+      // restic lock, so every later run backs up fine and then dies on
+      // forget/prune -- retention silently stops while the alert reports a
+      // stale *backup*. Plain `unlock` (never --remove-all) only removes locks
+      // restic can prove are stale, so this stays safe even if
+      // concurrencyPolicy is ever relaxed off Forbid.
       'backup.sh': |||
         #!/bin/bash
         set -e
         RESTIC="restic -v"
         $RESTIC snapshots || $RESTIC init
+        $RESTIC unlock
       ||| % this,
       'restore.sh': |||
         #!/bin/bash
